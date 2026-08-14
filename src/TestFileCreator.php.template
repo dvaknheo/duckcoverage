@@ -1,0 +1,51 @@
+<?php
+namespace $namespace\Test;
+
+//@codeCoverageIgnoreStart
+class RunAllTrait
+{
+    public function runInConsole()
+    {
+        $this->runAllBusiness();
+        $this->runAllModel();
+        $this->runAllExtract();
+    }
+    public function getAllRouteToRun()
+    {
+        $list = <<<EOT
+//@routes
+EOT;
+    }
+    public function getAllLocalToRun()
+    {
+        $list = <<<EOT
+#NAMESPACE_BEGIN XXXX
+#CLI Test\RunAll@runAllBusiness
+#CLI Test\RunAll@runAllModel
+EOT;
+    }
+    public function runAllController()
+    {
+        //@controllers
+    }
+    public function runAllBusiness()
+    {
+        ////[[[[
+        //@businesses
+        ////]]]]
+    }
+    public function runAllModel()
+    {
+        ////[[[[
+        //@models
+        ////]]]]
+    }
+    public function runAllExtract()
+    {
+        //
+    }
+    //// start ////
+    
+}
+
+//@codeCoverageIgnoreEnd

@@ -1,0 +1,29 @@
+{
+    "name": "dvaknheo/duckcoverage",
+    "description": "duckphp ext for test coverage",
+    "type": "library",
+    "keywords": [
+        "coverage",
+        "duckphp"
+    ],
+    "homepage": "https://www.github.com/dvaknheo/duckcoverage",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "dvaknheo",
+            "email": "dvaknheo@qq.com"
+        }
+    ],
+	"version": "1.0.1",
+    "autoload": {
+        "psr-4": {
+            "DuckCoverage\\": "src/"
+        }
+    },
+    "require": {
+        "php": ">=7.4.0"
+    },
+    "require-dev": {
+        "dvaknheo/libcoverage": "^1.0.7"
+    }
+}
