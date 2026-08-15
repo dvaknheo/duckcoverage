@@ -43,8 +43,8 @@ class DuckCoverage extends CoverageBase
         'duckcoverage_echo_back' => false,
 
     ];
-    public $session_id = '';
-    protected $is_save_session = false;
+    public $session_id = '';   // 兼容保留（不再用于请求）；会话改为连续传递所有 cookie
+    protected $cookies = [];   // 所有 cookie（name => value），随响应 Set-Cookie 持续更新
     protected $post = [];
     public function __construct()
     {
@@ -195,8 +195,7 @@ class DuckCoverage extends CoverageBase
     //////////////////
     protected function cleanClientStatus()
     {
-        $this->is_save_session = true;
-        $this->session_id = '';
+        $this->cookies = [];
     }
     protected function replay()
     {
@@ -231,8 +230,8 @@ class DuckCoverage extends CoverageBase
             App::Phase($phase);
             return;
         }
-        if (substr($request, 0, strlen('#URL_PREFIX ')) === '#URL_PREFIX ') {
-            $this->current_url_prefix = trim(substr($request, strlen('#URL_PREFIX ')));
+        if (substr($request, 0, strlen('#URL_PREFIX')) === '#URL_PREFIX') {
+            $this->current_url_prefix = trim(substr($request, strlen('#URL_PREFIX')));
             return;
         }
         if (substr($request, 0, strlen('#CALL ')) === '#CALL ') {
@@ -305,31 +304,39 @@ class DuckCoverage extends CoverageBase
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         //curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1); 
 
-        if ($this->is_save_session) {
-            curl_setopt($ch, CURLOPT_HEADER, 1);
-        }
+        // 始终抓取响应头，以收集/更新所有 Set-Cookie
+        curl_setopt($ch, CURLOPT_HEADER, 1);
 
         if (!empty($post)) {
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
         }
         /////////
-        if ($this->session_id) {
-            curl_setopt($ch, CURLOPT_COOKIE, "PHPSESSID={$this->session_id}");
+        // 连续传递所有已收集的 cookie（不再只传 PHPSESSID）
+        if (!empty($this->cookies)) {
+            $cookie_str = [];
+            foreach ($this->cookies as $name => $value) {
+                $cookie_str[] = $name . '=' . $value;
+            }
+            curl_setopt($ch, CURLOPT_COOKIE, implode('; ', $cookie_str));
         }
 
         $this->prepareCurl($ch);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
         $data = curl_exec($ch);
         $this->headers = [];
-        if ($this->is_save_session) {
-            $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-            $headers = substr($data, 0, $header_size);
-            $data = substr($data, $header_size);
-            $flag = preg_match('/PHPSESSID=(\w+)/', $headers, $m);
-            if ($flag) {
-                $this->session_id = $m[1];
-                $this->is_save_session = false;
+        // 收集响应中的所有 Set-Cookie，同名覆盖（空值/deleted 移除）
+        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $headers = substr($data, 0, $header_size);
+        $data = substr($data, $header_size);
+        if (preg_match_all('/Set-Cookie:\s*([^=;\s]+)=([^;]*)/i', $headers, $ms)) {
+            foreach ($ms[1] as $i => $name) {
+                $value = trim($ms[2][$i]);
+                if ($value === '' || strcasecmp($value, 'deleted') === 0) {
+                    unset($this->cookies[$name]);
+                } else {
+                    $this->cookies[$name] = $value;
+                }
             }
         }
         $this->postpareCurl($ch);
@@ -378,7 +385,7 @@ class DuckCoverage extends CoverageBase
     //////////
     protected function explainWeb($request)
     {
-        @list($command, $uri, $poststr, $method, $session_id) = explode(' ', $request);
+        @list($command, $uri, $poststr, $method) = explode(' ', $request);
 
         if ($command !== '#WEB') {
             return;
