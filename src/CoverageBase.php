@@ -190,6 +190,9 @@ class CoverageBase
                 $coverage->merge($t);   //@codeCoverageIgnore
             }
         }
+        // 补全部分覆盖文件：未执行的可执行行加入 lineCoverage（空数组），
+        // 否则报告只统计已执行行，部分覆盖文件会错误显示为 100%
+        $this->fillPartialCoveredFiles($coverage);
         $this->coverage = $coverage;
         $this->onBeforeReport();
         (new ReportOfHtmlOfFacade)->process($this->coverage, $path_report);
@@ -208,6 +211,27 @@ class CoverageBase
     protected function onBeforeReport()
     {
         //
+    }
+    /**
+     * 补全部分覆盖文件：把 filter 内已有覆盖数据的文件的可执行行补进 lineCoverage（未执行的为空数组）。
+     * php-code-coverage 9.x 只对"完全未覆盖"文件补未执行行（addUncoveredFilesFromFilter），
+     * 部分覆盖文件若缺失未执行行，报告会把该文件错误统计为 100%。
+     */
+    protected function fillPartialCoveredFiles(\SebastianBergmann\CodeCoverage\CodeCoverage $coverage): void
+    {
+        $analyser = new \SebastianBergmann\CodeCoverage\StaticAnalysis\ParsingFileAnalyser(true, false);
+        $lineCoverage = $coverage->getData()->lineCoverage();
+        foreach ($coverage->filter()->files() as $file) {
+            if (!isset($lineCoverage[$file])) {
+                continue; // 完全未覆盖文件由框架的 addUncoveredFilesFromFilter 处理
+            }
+            foreach (array_keys($analyser->executableLinesIn($file)) as $line) {
+                if (!isset($lineCoverage[$file][$line])) {
+                    $lineCoverage[$file][$line] = [];
+                }
+            }
+        }
+        $coverage->getData()->setLineCoverage($lineCoverage);
     }
     protected static function include_file($file)
     {
