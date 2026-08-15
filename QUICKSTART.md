@@ -245,7 +245,29 @@ Set `duckcoverage_report_direct => false`; reports are then stored per group (si
 
 ---
 
-## 9. Links
+## 9. Using the Docker environment (optional)
+
+`docker/test-php84/` provides a PHP 8.4 + Xdebug docker compose environment (the image definition is identical to the duckphp development version, so Docker build caches are reused):
+
+```bash
+cd docker/test-php84
+./start-docker.sh                                   # build & start container duckcoverage-test84
+./exec-docker.sh composer install --no-interaction --prefer-dist  # first-time dependency install (uses composer-test-php84.json)
+./exec-docker.sh php -l src/DuckCoverage.php        # syntax check
+./exec-docker.sh php -r 'var_dump(PHP_VERSION);'    # run any command inside the container
+./stop-docker.sh                                    # stop the container (keeps container & volumes)
+./end-docker.sh                                     # stop and remove the container
+```
+
+Notes:
+
+- The project root is mounted at `/DATA`; `composer-test-php84.json` overrides the container's `composer.json` (additionally requiring `dvaknheo/duckphp ^1.4.1` and `phpunit/php-code-coverage ^11.0` for testing). `vendor/` and the composer cache use named volumes, preserved across containers.
+- `XDEBUG_MODE=coverage` is set, so coverage collection works right inside the container.
+- `test_reports/` and `test_coveragedumps/` are mounted into the docker directory for easy inspection on the host.
+
+---
+
+## 10. Links
 
 - Project: <https://github.com/dvaknheo/duckcoverage>
 - DuckPHP: <https://github.com/dvaknheo/duckphp>

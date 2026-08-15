@@ -21,6 +21,7 @@ class CoverageBase
         'duckcoverage_path_src' => 'src/',
         'duckcoverage_path_dump' => 'test_coveragedumps',
         'duckcoverage_path_report' => 'test_reports',
+        'duckcoverage_report_direct' => true,
         'duckcoverage_group'=>'',
         'duckcoverage_name'=>'',
     ];
@@ -66,8 +67,7 @@ class CoverageBase
             }
         } else { // @codeCoverageIgnoreStart
             // Windows
-            if (preg_match('/^(([a-zA-Z]+:(\\|\/\/?))|\\\\|\/\/)/', $path)) {
-                return true;
+            if (preg_match('/^([a-zA-Z]:[\\\\\/]?|\\\\\\\\)/', $path)) {
             }
         }   // @codeCoverageIgnoreEnd
         return false;
@@ -102,6 +102,31 @@ class CoverageBase
     /**
      * php-code-coverage 9.x: CodeCoverage 必须显式传入 Driver + Filter
      */
+    /**
+     * php-code-coverage 9.x 用 Filter::includeDirectory();11.x 已移除,需要把目录展开为文件列表
+     */
+    protected static function filterIncludePath($filter, $path)
+    {
+        if (method_exists($filter, 'includeDirectory')) {
+            $filter->includeDirectory($path); // 9.x 只收录 .php 文件 // @codeCoverageIgnore
+            return; // @codeCoverageIgnore
+        }
+        if (is_file($path)) {
+            if (substr($path, -4) === '.php') {
+                $filter->includeFile($path);
+            }
+            return;
+        }
+        $directory = new \RecursiveDirectoryIterator($path, \FilesystemIterator::CURRENT_AS_PATHNAME | \FilesystemIterator::SKIP_DOTS);
+        $iterator = new \RecursiveIteratorIterator($directory);
+        $files = [];
+        foreach ($iterator as $file) {
+            if (is_file($file) && substr($file, -4) === '.php') {
+                $files[] = $file;
+            }
+        }
+        $filter->includeFiles($files);
+    }
     protected function createCoverage(): CodeCoverage
     {
         $filter = new CodeCoverageFilter();
@@ -118,9 +143,10 @@ class CoverageBase
             $this->coverage = $this->createCoverage();
         }
         $path_src = $this->getSubPath('duckcoverage_path_src');
-        $this->coverage->filter()->includeDirectory($path_src);
+        static::filterIncludePath($this->coverage->filter(), $path_src);
         
-        $this->coverage->start($this->options['duckcoverage_name'],true);
+        // php-code-coverage 9.x:start($id,$append=true);11.x:start($id,?TestSize $size=null)。不传第二参数两版兼容
+        $this->coverage->start($this->options['duckcoverage_name']);
         $this->is_begin = true;
     }
     
@@ -146,7 +172,7 @@ class CoverageBase
     protected function getReportPath($groups)
     {
         $path_report = $this->getSubPath('duckcoverage_path_report');
-        if(!$this->options['duckcoverage_report_direct']){
+        if(!($this->options['duckcoverage_report_direct'] ?? true)){
             if(empty($groups)){
                 $groups =[$this->options['duckcoverage_group']];
             }
@@ -170,7 +196,7 @@ class CoverageBase
         $path_report=$this->getReportPath($groups);
         $this->path_report = $path_report;
         $coverage = $this->createCoverage();
-        $coverage->filter()->includeDirectory($path_src);
+        static::filterIncludePath($coverage->filter(), $path_src);
         $coverage->setTests([
           'T' => [
             'size' => 'unknown',

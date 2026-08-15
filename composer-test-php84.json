@@ -14,14 +14,13 @@
             "email": "dvaknheo@qq.com"
         }
     ],
-	"version": "1.0.1",
     "autoload": {
         "psr-4": {
             "DuckCoverage\\": "src/"
         }
     },
     "require": {
-        "php": ">=7.4.0"
+        "php": ">=8.4.0"
     },
     "repositories": [
         {
@@ -35,8 +34,8 @@
     "require-dev": {
         "dvaknheo/duckphp": "1.4.1",
         "dvaknheo/libcoverage": "^1.0.7",
-        "phpunit/php-code-coverage": "^9.0 || ^11.0",
-        "phpunit/phpunit": "^9.6 || ^11.0"
+        "phpunit/php-code-coverage": "^11.0",
+        "phpunit/phpunit": "^11.0"
     },
     "scripts": {
         "fulltest": [

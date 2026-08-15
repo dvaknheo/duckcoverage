@@ -1,0 +1,35 @@
+version: "3"
+
+services:
+  duckcoverage84:
+    build:
+      context: ../..
+      dockerfile: docker/test-php84/Dockerfile
+    working_dir: /DATA
+    volumes:
+      - ../../:/DATA
+      # 本地 duckphp 开发版:composer-test-php84.json 的 path 仓库 url 为 ../DNMVCS,
+      # 在容器内解析为 /DNMVCS(vendor 里 duckphp 的 symlink 也指向 /DNMVCS)
+      - ../../../DNMVCS:/DNMVCS
+      - ./test_reports:/DATA/test_reports
+      - ./test_coveragedumps:/DATA/test_coveragedumps
+      - ../../composer-test-php84.json:/DATA/composer.json
+      - vendor84:/DATA/vendor
+      - composer-cache84:/tmp/composer
+    entrypoint:
+      - /bin/sh
+      - -c
+      - exec "$$@"
+      - docker-entrypoint
+    environment:
+      - COMPOSER_HOME=/tmp/composer
+      - XDEBUG_MODE=coverage
+    command: >
+      sh -c "
+        ([ -f /DATA/vendor/autoload.php ] || composer install --no-interaction --prefer-dist) &&
+        tail -f /dev/null
+      "
+
+volumes:
+  composer-cache84:
+  vendor84:

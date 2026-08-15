@@ -1,0 +1,6 @@
+/test_reports
+/test_coveragedumps
+/vendor
+/composer.lock
+/nbproject
+*.cache

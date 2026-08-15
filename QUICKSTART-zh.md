@@ -245,7 +245,29 @@ php cli.php duckcover --call MyApp/Test/Tester@runX?parameter=d
 
 ---
 
-## 9. 相关链接
+## 9. 使用 Docker 开发环境（可选）
+
+`docker/test-php84/` 提供了 PHP 8.4 + Xdebug 的 docker compose 环境（镜像定义与 duckphp 开发版一致，可复用其构建缓存）：
+
+```bash
+cd docker/test-php84
+./start-docker.sh                                   # 构建并启动容器 duckcoverage-test84
+./exec-docker.sh composer install --no-interaction --prefer-dist  # 首次安装依赖（使用 composer-test-php84.json）
+./exec-docker.sh php -l src/DuckCoverage.php        # 语法检查
+./exec-docker.sh php -r 'var_dump(PHP_VERSION);'    # 在容器内执行任意命令
+./stop-docker.sh                                    # 停止容器（保留容器与卷）
+./end-docker.sh                                     # 停止并删除容器
+```
+
+说明：
+
+- 容器把工程根挂载到 `/DATA`，`composer-test-php84.json` 覆盖容器内的 `composer.json`（比发布版额外引入 `dvaknheo/duckphp ^1.4.1`、`phpunit/php-code-coverage ^11.0` 用于测试）；`vendor/` 与 composer 缓存使用命名卷，跨容器保留。
+- 已设置 `XDEBUG_MODE=coverage`，容器内可直接跑覆盖率采集。
+- `test_reports/`、`test_coveragedumps/` 挂载到 docker 目录下，方便在宿主机查看输出。
+
+---
+
+## 10. 相关链接
 
 - 项目主页：<https://github.com/dvaknheo/duckcoverage>
 - DuckPHP：<https://github.com/dvaknheo/duckphp>
