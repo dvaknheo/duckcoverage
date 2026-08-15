@@ -12,7 +12,7 @@ A hands-on guide for DuckPHP application developers: get an HTML line-coverage r
 |---|---|
 | PHP | >= 7.4 |
 | Coverage driver | **Xdebug** or **PCOV** loaded (visible in `php -m`) |
-| Framework | DuckPHP >= 1.4 (includes `DuckPhp\HttpServer\HttpServer`) |
+| Framework | DuckPHP >= 1.4.1 (includes `DuckPhp\HttpServer\HttpServer`) |
 | Package | `phpunit/php-code-coverage` (9.x, the `Driver\Selector` API) |
 
 Check the driver:
@@ -65,7 +65,7 @@ class App extends \DuckPhp\DuckPhp
         'duckcoverage_server_port' => 8080,               // built-in test server port
         'duckcoverage_homepage' => '/index_dev.php/',     // built-in server base URI
         // 'duckcoverage_web_base_url' => 'http://admin.duckphp-local.com/', // set when using an external server
-        // 'duckcoverage_callback_class' => \MyApp\Test\Tester::class,      // replay callback class
+        // 'duckcoverage_callback' => \MyApp\Test\Tester::class,          // replay callback class
     ];
 }
 ```
@@ -119,10 +119,11 @@ class Tester implements DuckCoverageCBInterface
     public static function GetTestList()
     {
         // Paste the content of test_coveragedumps/mygroup.list here,
-        // or write it by hand (directives: #WEB / #CALL / #SETWEB / #PHASE / #URL_PREFIX)
+        // or write it by hand (directives: #WEB / #CALL / #SETWEB / #PHASE / #URL_PREFIX / #CMD)
         return <<<EOT
 #WEB /admin/index
 #WEB /admin/login username=admin&password=123456
+#CMD php cli.php admin/clean
 #CALL MyApp/Test/Tester@doSomething
 EOT;
     }
@@ -132,7 +133,7 @@ EOT;
 Then register it in `App::$options`:
 
 ```php
-'duckcoverage_callback_class' => \MyApp\Test\Tester::class,
+'duckcoverage_callback' => \MyApp\Test\Tester::class,
 ```
 
 ### 4.4 Replay
@@ -198,8 +199,9 @@ Results and dumps land in the current group's `test_coveragedumps/`; then run `-
 | `#WEB` | `#WEB /admin/index` | replay a web request; 2nd segment is POST params (`a=1&b=2`), 3rd can be `AJAX` or `OPTIONS` |
 | `#CALL` | `#CALL Foo/Bar@run?x=1` | call a local class/function directly |
 | `#SETWEB` | `#SETWEB _ _ _ _` | set hooks for following `#WEB` lines: `pre_curl pre_webcall post_webcall post_curl`; `_` clears |
-| `#PHASE` | `#PHASE api` | switch the DuckPHP phase |
+| `#PHASE` | `#PHASE api` | switch the DuckPHP phase (empty value is ignored) |
 | `#URL_PREFIX` | `#URL_PREFIX /v1` | prefix later `#WEB` URIs |
+| `#CMD` | `#CMD php cli.php admin/clean` | run a shell command verbatim (no escaping; a non-zero exit code prints a warning but does not stop the replay). A DuckPHP CLI entry launched this way also collects coverage (group passed via the `MYCOVERAGE_NAME` env var) — only replay trusted lists |
 | `##` | `## comment` | comment line, ignored |
 
 ---
@@ -227,7 +229,7 @@ To bypass the built-in test server, configure the external base URL:
 `phpunit/php-code-coverage` is missing, or the xdebug/pcov driver is not loaded. See sections 1 and 2.
 
 **Q: `--replay` does nothing?**
-Replay depends on `GetTestList()` from `duckcoverage_callback_class`. Configure the callback class first (see 4.3), or run a round of traced requests to produce a `.list` as reference.
+Replay depends on `GetTestList()` from `duckcoverage_callback`. Configure the callback class first (see 4.3), or run a round of traced requests to produce a `.list` as reference.
 
 **Q: Port 8080 is already in use?**
 Change `duckcoverage_server_port`.

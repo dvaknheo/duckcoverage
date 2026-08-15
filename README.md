@@ -19,7 +19,7 @@ It is the DuckPHP counterpart of [LibCoverage](https://github.com/dvaknheo/libco
 ## Requirements
 
 - PHP >= 7.4
-- DuckPHP (>= 1.4, includes the `DuckPhp\HttpServer\HttpServer` component)
+- DuckPHP (>= 1.4.1, includes the `DuckPhp\HttpServer\HttpServer` component)
 - `phpunit/php-code-coverage` (9.x)
 - A coverage driver: **Xdebug** or **PCOV** must be loaded
 
@@ -94,7 +94,7 @@ All options are passed through the DuckPHP application options (keys starting wi
 | `duckcoverage_homepage` | `'/index_dev.php/'` | base URI appended to the built-in server URL |
 | `duckcoverage_new_server` | `true` | start a fresh `HttpServer` instance for replay |
 | `duckcoverage_web_base_url` | `''` | external server base URL (e.g. `http://admin.duckphp-local.com/`); empty → use the built-in test server |
-| `duckcoverage_callback_class` | `null` | callback class implementing `DuckCoverageCBInterface` |
+| `duckcoverage_callback` | `null` | callback class implementing `DuckCoverageCBInterface` |
 | `duckcoverage_report_direct` | `true` | write reports directly under `test_reports/` (otherwise per-group / per-date subdirectories) |
 | `duckcoverage_echo_back` | `false` | echo the first 200 chars of each replayed response |
 
@@ -134,6 +134,7 @@ class MyTester implements \DuckCoverage\DuckCoverageCBInterface
         return <<<EOT
 #WEB /admin/index
 #WEB /admin/login
+#CMD php cli.php admin/clean
 #SETWEB _ _ _ _
 #CALL MyApp/Test/Tester@doSomething
 EOT;
@@ -148,8 +149,9 @@ Test-list directives:
 | `#WEB <uri> [post] [AJAX\|OPTIONS]` | replay an HTTP request (URI is prefixed with `#URL_PREFIX` when set) |
 | `#CALL <Class>@<method>\|Class->method\|Class::method\|function [?param=value]` | invoke a local callable |
 | `#SETWEB <pre_curl> <pre_webcall> <post_webcall> <post_curl>` | set curl / web hooks for the following `#WEB` lines (`_` clears) |
-| `#PHASE <phase>` | switch the DuckPHP phase |
+| `#PHASE <phase>` | switch the DuckPHP phase (an empty value is ignored) |
 | `#URL_PREFIX <prefix>` | URL prefix prepended to later `#WEB` URIs |
+| `#CMD <command>` | run a shell command verbatim (no escaping; a non-zero exit code prints a warning but does not stop the replay); a DuckPHP CLI entry launched this way also collects coverage (the group is passed via the `MYCOVERAGE_NAME` env var). Only replay test lists from trusted sources |
 | `## comment` / empty line | ignored |
 
 ## Related Projects

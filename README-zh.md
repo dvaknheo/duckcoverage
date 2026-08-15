@@ -19,7 +19,7 @@
 ## 环境要求
 
 - PHP >= 7.4
-- DuckPHP（>= 1.4，内置 `DuckPhp\HttpServer\HttpServer` 组件）
+- DuckPHP（>= 1.4.1，内置 `DuckPhp\HttpServer\HttpServer` 组件）
 - `phpunit/php-code-coverage`（9.x）
 - 覆盖率驱动：需加载 **Xdebug** 或 **PCOV** 之一
 
@@ -94,7 +94,7 @@ CLI 入口文件（`cli.php`）遵循你的 DuckPHP 工程模板，如果工程�
 | `duckcoverage_homepage` | `'/index_dev.php/'` | 拼在内置服务器 URL 后的基础 URI |
 | `duckcoverage_new_server` | `true` | 回放时启动全新的 `HttpServer` 实例 |
 | `duckcoverage_web_base_url` | `''` | 外部服务器基础 URL（如 `http://admin.duckphp-local.com/`）；为空则用内置测试服务器 |
-| `duckcoverage_callback_class` | `null` | 实现 `DuckCoverageCBInterface` 的回调类 |
+| `duckcoverage_callback` | `null` | 实现 `DuckCoverageCBInterface` 的回调类 |
 | `duckcoverage_report_direct` | `true` | 报告直接写到 `test_reports/` 下（否则按组/按日期分子目录） |
 | `duckcoverage_echo_back` | `false` | 回放时回显每个响应前 200 字符 |
 
@@ -134,6 +134,7 @@ class MyTester implements \DuckCoverage\DuckCoverageCBInterface
         return <<<EOT
 #WEB /admin/index
 #WEB /admin/login
+#CMD php cli.php admin/clean
 #SETWEB _ _ _ _
 #CALL MyApp/Test/Tester@doSomething
 EOT;
@@ -148,8 +149,9 @@ EOT;
 | `#WEB <uri> [post] [AJAX\|OPTIONS]` | 回放一个 HTTP 请求（设置了 `#URL_PREFIX` 时会自动加前缀） |
 | `#CALL <类>@<方法>\|类->方法\|类::方法\|函数 [?参数=值]` | 调用本地可调用对象 |
 | `#SETWEB <pre_curl> <pre_webcall> <post_webcall> <post_curl>` | 为后续 `#WEB` 行设置 curl / web 钩子（`_` 表示清除） |
-| `#PHASE <phase>` | 切换 DuckPHP phase |
+| `#PHASE <phase>` | 切换 DuckPHP phase（空值忽略） |
 | `#URL_PREFIX <前缀>` | 给后续 `#WEB` 的 URI 补前缀 |
+| `#CMD <命令>` | 原样执行 shell 命令（不做转义；非 0 退出码只打印警告、不中断回放）；以此方式启动的 DuckPHP CLI 入口同样采集覆盖率（组名通过 `MYCOVERAGE_NAME` 环境变量传递）。请仅回放可信来源的测试列表 |
 | `## 注释` / 空行 | 忽略 |
 
 ## 相关项目

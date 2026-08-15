@@ -12,7 +12,7 @@
 |---|---|
 | PHP | >= 7.4 |
 | 覆盖率驱动 | 已加载 **Xdebug** 或 **PCOV**（`php -m` 里能看到其一） |
-| 框架 | DuckPHP >= 1.4（内置 `DuckPhp\HttpServer\HttpServer`） |
+| 框架 | DuckPHP >= 1.4.1（内置 `DuckPhp\HttpServer\HttpServer`） |
 | 依赖包 | `phpunit/php-code-coverage`（9.x，php-code-coverage 的 `Driver\Selector` API） |
 
 检查驱动：
@@ -65,7 +65,7 @@ class App extends \DuckPhp\DuckPhp
         'duckcoverage_server_port' => 8080,               // 内置测试服务器端口
         'duckcoverage_homepage' => '/index_dev.php/',     // 内置服务器基础 URI
         // 'duckcoverage_web_base_url' => 'http://admin.duckphp-local.com/', // 用外部服务器时设置
-        // 'duckcoverage_callback_class' => \MyApp\Test\Tester::class,      // 回放回调类
+        // 'duckcoverage_callback' => \MyApp\Test\Tester::class,          // 回放回调类
     ];
 }
 ```
@@ -119,10 +119,11 @@ class Tester implements DuckCoverageCBInterface
     public static function GetTestList()
     {
         // 可以直接把 test_coveragedumps/mygroup.list 的内容粘到这里，
-        // 也可以手写（支持 #WEB / #CALL / #SETWEB / #PHASE / #URL_PREFIX 指令）
+        // 也可以手写（支持 #WEB / #CALL / #SETWEB / #PHASE / #URL_PREFIX / #CMD 指令）
         return <<<EOT
 #WEB /admin/index
 #WEB /admin/login username=admin&password=123456
+#CMD php cli.php admin/clean
 #CALL MyApp/Test/Tester@doSomething
 EOT;
     }
@@ -132,7 +133,7 @@ EOT;
 然后在 `App::$options` 里注册：
 
 ```php
-'duckcoverage_callback_class' => \MyApp\Test\Tester::class,
+'duckcoverage_callback' => \MyApp\Test\Tester::class,
 ```
 
 ### 4.4 回放
@@ -198,8 +199,9 @@ php cli.php duckcover --call MyApp/Test/Tester@runX?parameter=d
 | `#WEB` | `#WEB /admin/index` | 回放一个 Web 请求；第二段是 POST 参数（`a=1&b=2`），第三段可写 `AJAX` 或 `OPTIONS` |
 | `#CALL` | `#CALL Foo/Bar@run?x=1` | 直接调用本地类/函数 |
 | `#SETWEB` | `#SETWEB _ _ _ _` | 给后续 `#WEB` 设置钩子，依次为 `pre_curl pre_webcall post_webcall post_curl`，`_` 表示清除 |
-| `#PHASE` | `#PHASE api` | 切换 DuckPHP phase |
+| `#PHASE` | `#PHASE api` | 切换 DuckPHP phase（空值忽略） |
 | `#URL_PREFIX` | `#URL_PREFIX /v1` | 给后续 `#WEB` 的 URI 补前缀 |
+| `#CMD` | `#CMD php cli.php admin/clean` | 原样执行 shell 命令（不做转义；非 0 退出码只打印警告、不中断回放）；以此方式启动的 DuckPHP CLI 入口同样采集覆盖率（组名通过 `MYCOVERAGE_NAME` 环境变量传递）。请仅回放可信测试列表 |
 | `##` | `## 注释` | 注释行，忽略 |
 
 ---
@@ -227,7 +229,7 @@ php cli.php duckcover --call MyApp/Test/Tester@runX?parameter=d
 缺少 `phpunit/php-code-coverage`，或没有加载 xdebug/pcov 驱动。见第 1、2 节。
 
 **Q：`--replay` 什么都没做？**
-回放依赖 `duckcoverage_callback_class` 的 `GetTestList()`。先配置回调类（见 4.3），或先跑一轮带追踪头的请求生成 `.list` 作为参考。
+回放依赖 `duckcoverage_callback` 的 `GetTestList()`。先配置回调类（见 4.3），或先跑一轮带追踪头的请求生成 `.list` 作为参考。
 
 **Q：端口 8080 被占用？**
 改 `duckcoverage_server_port`。

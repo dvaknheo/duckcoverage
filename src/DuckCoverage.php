@@ -91,6 +91,21 @@ class DuckCoverage extends CoverageBase
                 DuckCoverage::_()->_OnAfterRun();
             });
         }
+
+        // cli 收集:#CMD 回放时父进程通过 MYCOVERAGE_NAME 环境变量传入组名,
+        // 命中时进程启动即 doBegin,shutdown 时 doEnd,实现命令行测试采集
+        if (PHP_SAPI === 'cli') {
+            $cli_group = (string) getenv('MYCOVERAGE_NAME');
+            if ($cli_group !== '') {
+                $this->options['duckcoverage_group'] = $cli_group;
+                $argv_str = implode(' ', array_slice(Helper::SERVER('argv', []), 1));
+                $this->options['duckcoverage_name'] = 'cli ' . date('ymdHis') . '-' . (getmypid() ?: 0) . ' ' . $argv_str;
+                $this->doBegin();
+                SystemWrapper::register_shutdown_function(function () {
+                    DuckCoverage::_()->doEnd();
+                });
+            }
+        }
         return $this;
     }
     public function isInHttpTest()
@@ -227,6 +242,9 @@ class DuckCoverage extends CoverageBase
         // 头部指令:#PHASE {phase} 直接切换当前 phase;#URL_PREFIX {prefix} 记录 URL 前缀
         if (substr($request, 0, strlen('#PHASE ')) === '#PHASE ') {
             $phase = trim(substr($request, strlen('#PHASE ')));
+            if ($phase === '') {
+                return; // 空 phase 忽略,避免 setCurrentContainer('') 切到不存在的 phase
+            }
             App::Phase($phase);
             return;
         }
@@ -242,6 +260,9 @@ class DuckCoverage extends CoverageBase
         }
         if (substr($request, 0, strlen('#SETWEB ')) === '#SETWEB ') {
             $this->explainSetWeb($request);
+        }
+        if (substr($request, 0, strlen('#CMD ')) === '#CMD ') {
+            $this->explainCmd($request);
         }
     }
     protected $current_url_prefix = '';
@@ -445,6 +466,33 @@ class DuckCoverage extends CoverageBase
         $this->post_webcall = ($post_webcall === '_') ? null : $post_webcall;
         $this->post_curl = ($post_curl === '_') ? null : $post_curl;
         return;
+    }
+    protected function explainCmd($request)
+    {
+        @list($command, $cmd) = explode(' ', $request, 2);
+        if ($command !== '#CMD') {
+            return;
+        }
+        $cmd = trim($cmd);
+        if ($cmd === '') {
+            return;
+        }
+        // 通过 MYCOVERAGE_NAME 环境变量把组名传给子进程,
+        // 使子进程的 DuckPHP CLI 入口在 init 时命中 cli 采集分支(见 init)
+        // 注意:PHP 8.0 起 putenv() 不再支持无 '=' 的删除用法,统一用 'NAME=' 空值形式
+        $group = (string) ($this->options['duckcoverage_group'] ?? '');
+        $old_env = getenv('MYCOVERAGE_NAME');
+        putenv('MYCOVERAGE_NAME=' . $group);
+        try {
+            echo $cmd . "\n";
+            passthru($cmd, $exit_code);
+        } finally {
+            // 恢复父进程环境变量(空值即删除)
+            putenv('MYCOVERAGE_NAME=' . ($old_env === false ? '' : $old_env));
+        }
+        if ($exit_code !== 0) {
+            echo static::class . " #CMD exit code = {$exit_code}\n";
+        }
     }
     ////////////////////////////////////////////////////////////////////////////
     /**
