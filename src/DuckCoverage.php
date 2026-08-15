@@ -23,7 +23,7 @@ class DuckCoverage extends CoverageBase
     //todo use  global singletonex to replace default singleton function
     public $options = [
         'duckcoverage_enable' => true,
-
+        'duckcoverage_data_file_json_file'=> 'DuckPhpData-duckcoverage.config.json',
         'duckcoverage_save_web_request_list' => true,
         'duckcoverage_save_local_call_list' => false,
 
@@ -49,6 +49,12 @@ class DuckCoverage extends CoverageBase
     {
         $this->options = array_replace_recursive($this->options, (new parent())->options); //merge parent's options;
         parent::__construct();
+    }
+    public function beforeInit()
+    {
+        if(App::_()->options['duckcoverage_enable']) {
+            App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
+        }
     }
     public function init(array $options, ?object $context = null)
     {
@@ -83,8 +89,6 @@ class DuckCoverage extends CoverageBase
                 DuckCoverage::_()->_OnAfterRun();
             });
         }
-
-
         return $this;
     }
     public function isInHttpTest()
@@ -99,7 +103,7 @@ class DuckCoverage extends CoverageBase
     }
     public function isInCliTest()
     {
-        if (PHP_SAPI === 'cli' && App::Current()->options['cli_enable']) {
+        if (PHP_SAPI === 'cli' && App::_()->options['cli_enable']) {
             $argv = Helper::SERVER('argv', []);
             $cmd = $argv[1] ?? 'NULL';
             if ($cmd === 'duckcover') {
