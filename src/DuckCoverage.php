@@ -37,6 +37,7 @@ class DuckCoverage extends CoverageBase
         'duckcoverage_web_base_url' => '',      // 外部服务器(如 nginx)基础 URL,如 http://admin.duckphp-local.com/ ;空则退回内部测试服务器
 
         'duckcoverage_callback_class' => null,
+        'duckcoverage_callback' => null,
 
         'duckcoverage_report_direct' => true,
         'duckcoverage_echo_back' => false,
@@ -54,6 +55,7 @@ class DuckCoverage extends CoverageBase
     {
         if(App::_()->options['duckcoverage_enable']) {
             App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
+            App::_()->options['data_file_enable'] = true;
         }
     }
     public function init(array $options, ?object $context = null)
@@ -203,8 +205,8 @@ class DuckCoverage extends CoverageBase
 
         $this->options['duckcoverage_name'] = 'replay';
 
-        $callback_class = $this->options['duckcoverage_callback_class'] ?? null;
-        $test_list = ($callback_class && method_exists($callback_class, 'GetTestList')) ? $callback_class::GetTestList() : '';
+        $callback = $this->options['duckcoverage_callback'] ?? null;
+        $test_list = $callback();
         $test_list = \explode("\n", $test_list);
 
         foreach ($test_list as $line) {
