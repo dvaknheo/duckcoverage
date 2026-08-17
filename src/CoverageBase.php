@@ -9,6 +9,7 @@ namespace DuckCoverage;
 class CoverageBase
 {
     protected $coverage;
+    protected $code_coverage;
 
     public $options = [
         'duckcoverage_path' => '',
@@ -83,48 +84,37 @@ class CoverageBase
     {
         $this->options = array_intersect_key(array_replace_recursive($this->options, $options) ?? [], $this->options);
         
-        try {
-            $this->coverage = CodeCoverageHelper::create();
-        } catch (\Throwable $e) {
-            // 无覆盖驱动(xdebug/pcov)时延迟到 doBegin 再创建，保证 CLI 命令可用
-            $this->coverage = null;
-        }
+        $this->code_coverage = CodeCoverageHelper::_();
+        $this->code_coverage->init([
+            'path_src' => $this->options['duckcoverage_path_src'],
+            'path_dump' => $this->options['duckcoverage_path_dump'],
+            'path_report' => $this->options['duckcoverage_path_report'],
+            'group' => $this->options['duckcoverage_group'],
+            'name' => $this->options['duckcoverage_name'],
+        ]);
         $this->is_inited = true;
         // auto start
         return $this;
     }
-    protected $is_begin = false;
     public function doBegin()
     {
-        if ($this->is_begin) {
-            return; // 防止重复调用
-        }
-        if (!$this->coverage) {
-            $this->coverage = CodeCoverageHelper::create();
-        }
-        $path_src = $this->getSubPath('duckcoverage_path_src');
-        CodeCoverageHelper::includePath($this->coverage, $path_src);
-        CodeCoverageHelper::begin($this->coverage, $this->options['duckcoverage_name']);
-        $this->is_begin = true;
+        $this->code_coverage->begin(
+            $this->options['duckcoverage_name'],
+            $this->getSubPath('duckcoverage_path_src')
+        );
     }
     
     public function doEnd()
     {
-        if (!$this->is_begin) {
-            return; // 防止重复调用
-        }
-        CodeCoverageHelper::end($this->coverage);
-        $path_dump = $this->getSubPath('duckcoverage_path_dump');
-        $path_dump = $path_dump. $this->options['duckcoverage_group'].'/';
-        
-        $file = md5($this->options['duckcoverage_name']);
-        
-        CodeCoverageHelper::dump($this->coverage, $path_dump.$file.'.php');
-        $this->is_begin = false;
+        $this->code_coverage->endAndDump(
+            $this->getSubPath('duckcoverage_path_dump'),
+            $this->options['duckcoverage_group'],
+            $this->options['duckcoverage_name']
+        );
     }
     public function getCoverage()
     {
-        return $this->coverage;
+        return $this->code_coverage->getCoverage();
     }
     protected function getReportPath($groups)
     {
@@ -148,32 +138,13 @@ class CoverageBase
         $path_src = $this->getSubPath('duckcoverage_path_src');
         $path_dump = $this->getSubPath('duckcoverage_path_dump');
         
-        
-        
         $path_report=$this->getReportPath($groups);
         $this->path_report = $path_report;
-        $coverage = CodeCoverageHelper::create();
-        CodeCoverageHelper::includePath($coverage, $path_src);
-        $coverage->setTests([
-          'T' => [
-            'size' => 'unknown',
-            'status' => -1,
-          ],
-        ]);
-        
-        foreach($groups as $group) {
-            $current_path_dump = $path_dump. $group;
-            CodeCoverageHelper::mergeFromDir($coverage, $current_path_dump);
-        }
-        // 补全部分覆盖文件：未执行的可执行行加入 lineCoverage（空数组），
-        // 否则报告只统计已执行行，部分覆盖文件会错误显示为 100%
-        CodeCoverageHelper::fillPartialCoveredFiles($coverage);
-        $this->coverage = $coverage;
-        $this->onBeforeReport();
-        $ret = CodeCoverageHelper::renderReport($this->coverage, $path_report);
-        
-        $this->coverage = null; 
-        return $ret;
+        return $this->code_coverage->createReport($path_src, $groups, $path_dump, $path_report, function ($coverage) {
+            $this->coverage = $coverage;   // 供 onBeforeReport hook 使用
+            $this->onBeforeReport();
+            $this->coverage = null;
+        });
     }
     protected function onBeforeReport()
     {
