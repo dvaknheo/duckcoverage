@@ -6,6 +6,8 @@
 
 namespace DuckCoverage;
 
+use LibCoverage\GroupCoverageRunner;
+
 class CoverageBase
 {
     public $options = [

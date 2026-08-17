@@ -20,7 +20,8 @@
         }
     },
     "require": {
-        "php": ">=8.4.0"
+        "php": ">=8.4.0",
+        "dvaknheo/libcoverage": "1.0.8"
     },
     "repositories": [
         {
@@ -40,7 +41,6 @@
     ],
     "require-dev": {
         "dvaknheo/duckphp": "1.4.1",
-        "dvaknheo/libcoverage": "1.0.7",
         "phpunit/php-code-coverage": "^11.0",
         "phpunit/phpunit": "^11.0"
     },
