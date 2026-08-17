@@ -15,21 +15,26 @@ use SebastianBergmann\CodeCoverage\Report\PHP as ReportOfPHP;
 /**
  * 封装 php-code-coverage 的全部直接依赖(创建/采集/dump/合并/报告)。
  * 组件风格:_() 单例 + init() 初始化。
- * 对外只暴露合并后的方法(begin/endAndDump/createReport),避免调用方零散接触底层 API。
+ * 按组(group)驱动覆盖率工作流:begin() 采集 -> end() 停止并 dump 到组目录 -> createReport()/showAllReport() 按组合并出报告。
+ * 对外只暴露合并后的方法,避免调用方零散接触底层 API。
  */
-class CodeCoverageHelper
+class GroupCoverageRunner
 {
     public $options = [
         'path_src' => 'src/',
         'path_dump' => 'test_coveragedumps',
         'path_report' => 'test_reports',
         'group' => '',
+        'groups' => [],
         'name' => '',
+        'before_render' => null,
     ];
     public $is_inited = false;
 
     protected $coverage;
     protected $is_begin = false;
+    protected $current_name = '';
+    protected $current_group = '';
 
     protected static $_instances = [];
     //embed
@@ -70,9 +75,10 @@ class CodeCoverageHelper
         return $this->coverage;
     }
     /**
-     * 开始采集：懒创建 coverage + 收录源码目录 + start（内部防重入）
+     * 开始采集：懒创建 coverage + 收录源码目录(options['path_src']) + start（内部防重入）。
+     * 捕获当前测试名与组名(options['group']),供 end() 无参 dump 使用。
      */
-    public function begin(string $name, string $path_src): void
+    public function begin(string $name): void
     {
         if ($this->is_begin) {
             return; // 防止重复调用
@@ -80,32 +86,42 @@ class CodeCoverageHelper
         if (!$this->coverage) {
             $this->coverage = $this->createCoverage();
         }
-        static::includePath($this->coverage, $path_src);
+        $this->current_name = $name;
+        $this->current_group = (string) ($this->options['group'] ?? '');
+        static::includePath($this->coverage, (string) $this->options['path_src']);
         // php-code-coverage 9.x:start($id,$append=true);11.x:start($id,?TestSize $size=null)。不传第二参数两版兼容
         $this->coverage->start($name);
         $this->is_begin = true;
     }
     /**
-     * 结束采集并 dump：stop + Report\PHP 序列化到 {path_dump}/{group}/{md5(name)}.php
+     * 结束采集并 dump：stop + Report\PHP 序列化到 {path_dump}/{group}/{md5(name)}.php。
+     * 路径/组/名来自 begin() 捕获的状态与 options['path_dump']。
      */
-    public function endAndDump(string $path_dump, string $group, string $name): void
+    public function end(): void
     {
         if (!$this->is_begin) {
             return; // 防止重复调用
         }
         $this->coverage->stop();
-        $file = $path_dump . $group . '/' . md5($name) . '.php';
+        $file = (string) $this->options['path_dump'] . $this->current_group . '/' . md5($this->current_name) . '.php';
         (new ReportOfPHP)->process($this->coverage, $file);
         $this->is_begin = false;
     }
     /**
-     * 生成报告：新建 coverage 收录源码 -> 合并各组 dump -> 补全部分覆盖文件 -> 渲染 HTML 并统计。
-     * $before_render 回调在渲染前调用（参数为合并后的 coverage），供外层 hook（如 onBeforeReport）使用。
+     * 生成报告：新建 coverage 收录源码(options['path_src']) -> 按组(options['groups'],空则回落 [options['group']])合并 dump
+     * -> 补全部分覆盖文件 -> 渲染前调用 options['before_render'] -> 渲染 HTML 到 options['path_report'] 并统计。
      *
      * @return array{lines_tested:int, lines_total:int, lines_percent:string}
      */
-    public function createReport(string $path_src, array $groups, string $path_dump, string $path_report, ?callable $before_render = null): array
+    public function createReport(): array
     {
+        $path_src = (string) $this->options['path_src'];
+        $path_dump = (string) $this->options['path_dump'];
+        $path_report = (string) $this->options['path_report'];
+        $groups = (array) ($this->options['groups'] ?? []);
+        if (empty($groups)) {
+            $groups = [(string) ($this->options['group'] ?? '')];
+        }
         $coverage = $this->createCoverage();
         static::includePath($coverage, $path_src);
         $coverage->setTests([
@@ -120,10 +136,26 @@ class CodeCoverageHelper
         // 补全部分覆盖文件：未执行的可执行行加入 lineCoverage（空数组），
         // 否则报告只统计已执行行，部分覆盖文件会错误显示为 100%
         static::fillPartialCoveredFiles($coverage);
-        if ($before_render) {
+        $before_render = $this->options['before_render'] ?? null;
+        if (is_callable($before_render)) {
             $before_render($coverage);
         }
         return static::renderReport($coverage, $path_report);
+    }
+    /**
+     * createReport() + 打印展示（对齐 LibCoverage 风格：Output File / Test Lines）
+     *
+     * @return array{lines_tested:int, lines_total:int, lines_percent:string}
+     */
+    public function showAllReport(): array
+    {
+        $data = $this->createReport();
+        echo "\nSTART CREATE REPORT AT " . DATE(DATE_ATOM) . "\n";
+        echo "Output File:\n\n\033[42;30mfile://" . $this->options['path_report'] . "index.html" . "\033[0m\n";
+        echo "\n\033[42;30m All Done \033[0m Test Done!";
+        echo "\nTest Lines: \033[42;30m{$data['lines_tested']}/{$data['lines_total']}({$data['lines_percent']})\033[0m\n";
+        echo "\n\n";
+        return $data;
     }
     /////////////////////////////
     // 以下为内部实现（兼容 php-code-coverage 9.x / 11.x）

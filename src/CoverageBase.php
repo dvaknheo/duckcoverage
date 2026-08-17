@@ -84,13 +84,19 @@ class CoverageBase
     {
         $this->options = array_intersect_key(array_replace_recursive($this->options, $options) ?? [], $this->options);
         
-        $this->code_coverage = CodeCoverageHelper::_();
+        $this->code_coverage = GroupCoverageRunner::_();
         $this->code_coverage->init([
-            'path_src' => $this->options['duckcoverage_path_src'],
-            'path_dump' => $this->options['duckcoverage_path_dump'],
-            'path_report' => $this->options['duckcoverage_path_report'],
+            'path_src' => $this->getSubPath('duckcoverage_path_src'),
+            'path_dump' => $this->getSubPath('duckcoverage_path_dump'),
+            'path_report' => $this->getSubPath('duckcoverage_path_report'),
             'group' => $this->options['duckcoverage_group'],
+            'groups' => [],
             'name' => $this->options['duckcoverage_name'],
+            'before_render' => function ($coverage) {
+                $this->coverage = $coverage;   // 供 onBeforeReport hook 使用
+                $this->onBeforeReport();
+                $this->coverage = null;
+            },
         ]);
         $this->is_inited = true;
         // auto start
@@ -98,19 +104,12 @@ class CoverageBase
     }
     public function doBegin()
     {
-        $this->code_coverage->begin(
-            $this->options['duckcoverage_name'],
-            $this->getSubPath('duckcoverage_path_src')
-        );
+        $this->code_coverage->begin($this->options['duckcoverage_name']);
     }
     
     public function doEnd()
     {
-        $this->code_coverage->endAndDump(
-            $this->getSubPath('duckcoverage_path_dump'),
-            $this->options['duckcoverage_group'],
-            $this->options['duckcoverage_name']
-        );
+        $this->code_coverage->end();
     }
     public function getCoverage()
     {
@@ -135,16 +134,12 @@ class CoverageBase
     
     public function createReport($groups =[])
     {
-        $path_src = $this->getSubPath('duckcoverage_path_src');
-        $path_dump = $this->getSubPath('duckcoverage_path_dump');
-        
         $path_report=$this->getReportPath($groups);
         $this->path_report = $path_report;
-        return $this->code_coverage->createReport($path_src, $groups, $path_dump, $path_report, function ($coverage) {
-            $this->coverage = $coverage;   // 供 onBeforeReport hook 使用
-            $this->onBeforeReport();
-            $this->coverage = null;
-        });
+        // 动态注入本次报告参数(before_render 闭包已在 init 配置进 options)
+        $this->code_coverage->options['groups'] = $groups;
+        $this->code_coverage->options['path_report'] = $path_report;
+        return $this->code_coverage->createReport();
     }
     protected function onBeforeReport()
     {
