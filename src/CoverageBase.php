@@ -9,7 +9,6 @@ namespace DuckCoverage;
 class CoverageBase
 {
     protected $coverage;
-    protected $code_coverage;
 
     public $options = [
         'duckcoverage_path' => '',
@@ -84,8 +83,7 @@ class CoverageBase
     {
         $this->options = array_intersect_key(array_replace_recursive($this->options, $options) ?? [], $this->options);
         
-        $this->code_coverage = GroupCoverageRunner::_();
-        $this->code_coverage->init([
+        GroupCoverageRunner::_()->init([
             'path_src' => $this->getSubPath('duckcoverage_path_src'),
             'path_dump' => $this->getSubPath('duckcoverage_path_dump'),
             'path_report' => $this->getSubPath('duckcoverage_path_report'),
@@ -104,16 +102,18 @@ class CoverageBase
     }
     public function doBegin()
     {
-        $this->code_coverage->begin($this->options['duckcoverage_name']);
+        // 每次采集前同步最新测试名（duckcoverage_name 可能已更新）
+        GroupCoverageRunner::_()->options['name'] = $this->options['duckcoverage_name'];
+        GroupCoverageRunner::_()->doBegin();
     }
     
     public function doEnd()
     {
-        $this->code_coverage->end();
+        GroupCoverageRunner::_()->doEnd();
     }
     public function getCoverage()
     {
-        return $this->code_coverage->getCoverage();
+        return GroupCoverageRunner::_()->getCoverage();
     }
     protected function getReportPath($groups)
     {
@@ -137,9 +137,9 @@ class CoverageBase
         $path_report=$this->getReportPath($groups);
         $this->path_report = $path_report;
         // 动态注入本次报告参数(before_render 闭包已在 init 配置进 options)
-        $this->code_coverage->options['groups'] = $groups;
-        $this->code_coverage->options['path_report'] = $path_report;
-        return $this->code_coverage->createReport();
+        GroupCoverageRunner::_()->options['groups'] = $groups;
+        GroupCoverageRunner::_()->options['path_report'] = $path_report;
+        return GroupCoverageRunner::_()->createReport();
     }
     protected function onBeforeReport()
     {

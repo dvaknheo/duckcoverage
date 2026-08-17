@@ -76,9 +76,9 @@ class GroupCoverageRunner
     }
     /**
      * 开始采集：懒创建 coverage + 收录源码目录(options['path_src']) + start（内部防重入）。
-     * 捕获当前测试名与组名(options['group']),供 end() 无参 dump 使用。
+     * 测试名取自 options['name']；捕获当前组名(options['group'])，供 doEnd() 无参 dump 使用。
      */
-    public function begin(string $name): void
+    public function doBegin(): void
     {
         if ($this->is_begin) {
             return; // 防止重复调用
@@ -86,6 +86,7 @@ class GroupCoverageRunner
         if (!$this->coverage) {
             $this->coverage = $this->createCoverage();
         }
+        $name = (string) $this->options['name'];
         $this->current_name = $name;
         $this->current_group = (string) ($this->options['group'] ?? '');
         static::includePath($this->coverage, (string) $this->options['path_src']);
@@ -95,9 +96,9 @@ class GroupCoverageRunner
     }
     /**
      * 结束采集并 dump：stop + Report\PHP 序列化到 {path_dump}/{group}/{md5(name)}.php。
-     * 路径/组/名来自 begin() 捕获的状态与 options['path_dump']。
+     * 路径/组/名来自 doBegin() 捕获的状态与 options['path_dump']。
      */
-    public function end(): void
+    public function doEnd(): void
     {
         if (!$this->is_begin) {
             return; // 防止重复调用
