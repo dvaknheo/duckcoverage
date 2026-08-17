@@ -8,8 +8,6 @@ namespace DuckCoverage;
 
 class CoverageBase
 {
-    protected $coverage;
-
     public $options = [
         'duckcoverage_path' => '',
         'duckcoverage_path_src' => 'src/',
@@ -88,13 +86,7 @@ class CoverageBase
             'path_dump' => $this->getSubPath('duckcoverage_path_dump'),
             'path_report' => $this->getSubPath('duckcoverage_path_report'),
             'group' => $this->options['duckcoverage_group'],
-            'groups' => [],
             'name' => $this->options['duckcoverage_name'],
-            'before_render' => function ($coverage) {
-                $this->coverage = $coverage;   // 供 onBeforeReport hook 使用
-                $this->onBeforeReport();
-                $this->coverage = null;
-            },
         ]);
         $this->is_inited = true;
         // auto start
@@ -102,9 +94,10 @@ class CoverageBase
     }
     public function doBegin()
     {
-        // 每次采集前同步最新测试名（duckcoverage_name 可能已更新）
-        GroupCoverageRunner::_()->options['name'] = $this->options['duckcoverage_name'];
-        GroupCoverageRunner::_()->doBegin();
+        GroupCoverageRunner::_()->doBegin(
+            $this->options['duckcoverage_name'],
+            $this->options['duckcoverage_group']
+        );
     }
     
     public function doEnd()
@@ -134,16 +127,12 @@ class CoverageBase
     
     public function createReport($groups =[])
     {
+        $path_src = $this->getSubPath('duckcoverage_path_src');
+        $path_dump = $this->getSubPath('duckcoverage_path_dump');
+        
         $path_report=$this->getReportPath($groups);
         $this->path_report = $path_report;
-        // 动态注入本次报告参数(before_render 闭包已在 init 配置进 options)
-        GroupCoverageRunner::_()->options['groups'] = $groups;
-        GroupCoverageRunner::_()->options['path_report'] = $path_report;
-        return GroupCoverageRunner::_()->createReport();
-    }
-    protected function onBeforeReport()
-    {
-        //
+        return GroupCoverageRunner::_()->createReport($path_src, $groups, $path_dump, $path_report);
     }
     ////[[[[
     protected function watchingBegin($name)

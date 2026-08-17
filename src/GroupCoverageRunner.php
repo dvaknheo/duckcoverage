@@ -27,7 +27,6 @@ class GroupCoverageRunner
         'group' => '',
         'groups' => [],
         'name' => '',
-        'before_render' => null,
     ];
     public $is_inited = false;
 
@@ -76,9 +75,9 @@ class GroupCoverageRunner
     }
     /**
      * 开始采集：懒创建 coverage + 收录源码目录(options['path_src']) + start（内部防重入）。
-     * 测试名取自 options['name']；捕获当前组名(options['group'])，供 doEnd() 无参 dump 使用。
+     * 测试名与组名由参数传入（组名为空时回落到 options['group']），供 doEnd() 无参 dump 使用。
      */
-    public function doBegin(): void
+    public function doBegin(string $name, string $group = ''): void
     {
         if ($this->is_begin) {
             return; // 防止重复调用
@@ -86,9 +85,8 @@ class GroupCoverageRunner
         if (!$this->coverage) {
             $this->coverage = $this->createCoverage();
         }
-        $name = (string) $this->options['name'];
         $this->current_name = $name;
-        $this->current_group = (string) ($this->options['group'] ?? '');
+        $this->current_group = ($group !== '') ? $group : (string) ($this->options['group'] ?? '');
         static::includePath($this->coverage, (string) $this->options['path_src']);
         // php-code-coverage 9.x:start($id,$append=true);11.x:start($id,?TestSize $size=null)。不传第二参数两版兼容
         $this->coverage->start($name);
@@ -109,17 +107,13 @@ class GroupCoverageRunner
         $this->is_begin = false;
     }
     /**
-     * 生成报告：新建 coverage 收录源码(options['path_src']) -> 按组(options['groups'],空则回落 [options['group']])合并 dump
-     * -> 补全部分覆盖文件 -> 渲染前调用 options['before_render'] -> 渲染 HTML 到 options['path_report'] 并统计。
+     * 生成报告：新建 coverage 收录源码 -> 按组合并 dump -> 补全部分覆盖文件 -> 渲染 HTML 并统计。
+     * $groups 为空时回落到 options['group']。
      *
      * @return array{lines_tested:int, lines_total:int, lines_percent:string}
      */
-    public function createReport(): array
+    public function createReport(string $path_src, array $groups, string $path_dump, string $path_report): array
     {
-        $path_src = (string) $this->options['path_src'];
-        $path_dump = (string) $this->options['path_dump'];
-        $path_report = (string) $this->options['path_report'];
-        $groups = (array) ($this->options['groups'] ?? []);
         if (empty($groups)) {
             $groups = [(string) ($this->options['group'] ?? '')];
         }
@@ -137,22 +131,24 @@ class GroupCoverageRunner
         // 补全部分覆盖文件：未执行的可执行行加入 lineCoverage（空数组），
         // 否则报告只统计已执行行，部分覆盖文件会错误显示为 100%
         static::fillPartialCoveredFiles($coverage);
-        $before_render = $this->options['before_render'] ?? null;
-        if (is_callable($before_render)) {
-            $before_render($coverage);
-        }
         return static::renderReport($coverage, $path_report);
     }
     /**
-     * createReport() + 打印展示（对齐 LibCoverage 风格：Output File / Test Lines）
+     * createReport() + 打印展示（对齐 LibCoverage 风格：Output File / Test Lines）。
+     * 参数从 options 读取（path_src/path_dump/path_report/groups）。
      *
      * @return array{lines_tested:int, lines_total:int, lines_percent:string}
      */
     public function showAllReport(): array
     {
-        $data = $this->createReport();
+        $data = $this->createReport(
+            (string) $this->options['path_src'],
+            (array) ($this->options['groups'] ?? []),
+            (string) $this->options['path_dump'],
+            (string) $this->options['path_report']
+        );
         echo "\nSTART CREATE REPORT AT " . DATE(DATE_ATOM) . "\n";
-        echo "Output File:\n\n\033[42;30mfile://" . $this->options['path_report'] . "index.html" . "\033[0m\n";
+        echo "Output File:\n\n\033[42;30mfile://" . rtrim((string) $this->options['path_report'], '/\\') . "/index.html" . "\033[0m\n";
         echo "\n\033[42;30m All Done \033[0m Test Done!";
         echo "\nTest Lines: \033[42;30m{$data['lines_tested']}/{$data['lines_total']}({$data['lines_percent']})\033[0m\n";
         echo "\n\n";
@@ -201,6 +197,9 @@ class GroupCoverageRunner
      */
     protected static function mergeFromDir(CodeCoverage $coverage, string $dir): void
     {
+        if (!is_dir($dir)) {
+            return; // 组目录不存在(未采集过),跳过而非报错
+        }
         $directory = new \RecursiveDirectoryIterator($dir, \FilesystemIterator::CURRENT_AS_PATHNAME | \FilesystemIterator::SKIP_DOTS);
         $iterator = new \RecursiveIteratorIterator($directory);
         $files = \iterator_to_array($iterator, false);

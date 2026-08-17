@@ -59,9 +59,11 @@ class DuckCoverage extends CoverageBase
     }
     public function init(array $options, ?object $context = null)
     {
+        // 必须先于 parent::init() 赋值:runner 在 CoverageBase::init 时对路径做快照,
+        // 否则 getSubPath 会用默认空路径快照,导致 dump 与报告目录错位
+        $this->options['duckcoverage_path'] = Helper::PathOfRuntime();
         parent::init($options, $context);
 
-        $this->options['duckcoverage_path'] = Helper::PathOfRuntime();
         $this->options['duckcoverage_path_server'] = Helper::PathOfProject();
         $this->options['duckcoverage_path_src'] ??= realpath(__DIR__ . '/../../') . '/src'; //??
 
