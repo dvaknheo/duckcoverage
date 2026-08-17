@@ -12,7 +12,6 @@ use DuckPhp\Core\ExitException;
 use DuckPhp\Core\SystemWrapper;
 use DuckPhp\Foundation\Helper;
 use DuckPhp\HttpServer\HttpServer;
-use SebastianBergmann\CodeCoverage\CodeCoverage;
 
 #CALL
 #WEB url post

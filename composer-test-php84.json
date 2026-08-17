@@ -29,11 +29,18 @@
             "options": {
                 "symlink": true
             }
+        },
+        {
+            "type": "path",
+            "url": "../libcoverage",
+            "options": {
+                "symlink": true
+            }
         }
     ],
     "require-dev": {
         "dvaknheo/duckphp": "1.4.1",
-        "dvaknheo/libcoverage": "^1.0.7",
+        "dvaknheo/libcoverage": "1.0.7",
         "phpunit/php-code-coverage": "^11.0",
         "phpunit/phpunit": "^11.0"
     },

@@ -11,6 +11,8 @@ services:
       # 本地 duckphp 开发版:composer-test-php84.json 的 path 仓库 url 为 ../DNMVCS,
       # 在容器内解析为 /DNMVCS(vendor 里 duckphp 的 symlink 也指向 /DNMVCS)
       - ../../../DNMVCS:/DNMVCS
+      # 本地 libcoverage 开发版:path 仓库 url 为 ../libcoverage,容器内解析为 /libcoverage
+      - ../../../libcoverage:/libcoverage
       - ./test_reports:/DATA/test_reports
       - ./test_coveragedumps:/DATA/test_coveragedumps
       - ../../composer-test-php84.json:/DATA/composer.json
