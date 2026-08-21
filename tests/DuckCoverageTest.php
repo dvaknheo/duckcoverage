@@ -8,13 +8,9 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
 {
     public function testAll()
     {
-        if (_duckcoverage_has_driver()) {
-            LibCoverage::Begin(DuckCoverage::class);
-        }
+        LibCoverage::Begin(DuckCoverage::class);
         $this->testDefaultOptions();
-        if (_duckcoverage_has_driver()) {
-            LibCoverage::End();
-        }
+        LibCoverage::End();
     }
     private function testDefaultOptions()
     {

@@ -8,13 +8,9 @@ class TestFileCreatorTest extends \PHPUnit\Framework\TestCase
 {
     public function testAll()
     {
-        if (_duckcoverage_has_driver()) {
-            LibCoverage::Begin(TestFileCreator::class);
-        }
+        LibCoverage::Begin(TestFileCreator::class);
         $this->testDefaultOptions();
-        if (_duckcoverage_has_driver()) {
-            LibCoverage::End();
-        }
+        LibCoverage::End();
     }
     private function testDefaultOptions()
     {

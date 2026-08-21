@@ -87,8 +87,7 @@ class CoverageBase
             'path_src' => $this->getSubPath('duckcoverage_path_src'),
             'path_dump' => $this->getSubPath('duckcoverage_path_dump'),
             'path_report' => $this->getSubPath('duckcoverage_path_report'),
-            'group' => $this->options['duckcoverage_group'],
-            'name' => $this->options['duckcoverage_name'],
+            'groups' => [],
         ]);
         $this->is_inited = true;
         // auto start
@@ -113,7 +112,7 @@ class CoverageBase
     protected function getReportPath($groups)
     {
         $path_report = $this->getSubPath('duckcoverage_path_report');
-        if(!($this->options['duckcoverage_report_direct'] ?? true)){
+        if (!($this->options['duckcoverage_report_direct'] ?? true)) {
             if(empty($groups)){
                 $groups =[$this->options['duckcoverage_group']];
             }

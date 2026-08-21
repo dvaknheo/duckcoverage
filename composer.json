@@ -41,18 +41,6 @@
         }
     ],
     "require-dev": {
-        "dvaknheo/duckphp": "1.4.1",
-        "phpunit/php-code-coverage": "^9.0 || ^11.0",
-        "phpunit/phpunit": "^9.6 || ^11.0"
-    },
-    "scripts": {
-        "fulltest": [
-            "phpunit",
-            "phpunit tests/support.php"
-        ],
-        "singletest": [
-            "phpunit",
-            "phpunit tests/support.php"
-        ]
+        "phpunit/phpunit": "^9.6.36"
     }
 }

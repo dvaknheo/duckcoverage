@@ -8,17 +8,13 @@ class DuckCoverageCBInterfaceTest extends \PHPUnit\Framework\TestCase
 {
     public function testAll()
     {
-        if (_duckcoverage_has_driver()) {
-            LibCoverage::Begin(DuckCoverageCBInterface::class);
-        }
+        LibCoverage::Begin(DuckCoverageCBInterface::class);
         $ref = new \ReflectionClass(DuckCoverageCBInterface::class);
         $expected = ['BeforeReplayTest', 'GetTestList', 'AfterReplayTest', 'OnReport'];
         foreach ($expected as $method) {
             $this->assertTrue($ref->hasMethod($method), "missing method {$method}");
             $this->assertTrue($ref->getMethod($method)->isStatic(), "{$method} should be static");
         }
-        if (_duckcoverage_has_driver()) {
-            LibCoverage::End();
-        }
+        LibCoverage::End();
     }
 }

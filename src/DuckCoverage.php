@@ -23,22 +23,28 @@ class DuckCoverage extends CoverageBase
     public $options = [
         'duckcoverage_enable' => true,
         'duckcoverage_data_file_json_file'=> 'DuckPhpData-duckcoverage.config.json',
-        'duckcoverage_save_web_request_list' => true,
-        'duckcoverage_save_local_call_list' => false,
 
+        'duckcoverage_path' => '',
+        'duckcoverage_path_src' => 'src/',   // 不需要
+        'duckcoverage_path_dump' => 'test_coveragedumps',
+        'duckcoverage_path_report' => 'test_reports',
+        'duckcoverage_report_direct' => true,
+        'duckcoverage_group'=>'', 
+        'duckcoverage_name'=>'',     // 不需要
+
+        'duckcoverage_web_base_url' => '',      // 外部服务器(如 nginx)基础 URL,如 http://admin.duckphp-local.com/ ;空则退回内部测试服务器
         'duckcoverage_server_port' => 8080,
         'duckcoverage_server_host' => '',
         'duckcoverage_path_server' => '',
         'duckcoverage_path_document' => 'public',
         'duckcoverage_homepage' => '/index_dev.php/',
         'duckcoverage_new_server' => true,
+        
 
-        'duckcoverage_web_base_url' => '',      // 外部服务器(如 nginx)基础 URL,如 http://admin.duckphp-local.com/ ;空则退回内部测试服务器
-
-        'duckcoverage_callback_class' => null,
+        //'duckcoverage_callback_class' => null,
         'duckcoverage_callback' => null,
-
-        'duckcoverage_report_direct' => true,
+        'duckcoverage_save_web_request_list' => true,
+        'duckcoverage_save_local_call_list' => false,
         'duckcoverage_echo_back' => false,
 
     ];
@@ -92,6 +98,7 @@ class DuckCoverage extends CoverageBase
             });
         }
 
+        // 这里要改成 DuckPhp 里的
         // cli 收集:#CMD 回放时父进程通过 MYCOVERAGE_NAME 环境变量传入组名,
         // 命中时进程启动即 doBegin,shutdown 时 doEnd,实现命令行测试采集
         if (PHP_SAPI === 'cli') {

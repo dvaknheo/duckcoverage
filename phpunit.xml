@@ -13,9 +13,10 @@
     <testsuites>
         <testsuite name="DuckCoverage Test Suite">
             <directory>./tests/</directory>
+            <exclude>./tests/data_for_tests</exclude>
         </testsuite>
         <testsuite name="DuckCoverage CodeCoverage">
-            <file>tests/support.php</file>
+             <file>tests/support.php</file>
         </testsuite>
     </testsuites>
     <filter>
