@@ -65,7 +65,6 @@ class DuckCoverage extends CoverageBase
         parent::init($options, $context);
 
         $this->options['duckcoverage_path_server'] = Helper::PathOfProject();
-        $this->options['duckcoverage_path_src'] ??= realpath(__DIR__ . '/../../') . '/src'; //??
 
         if (!$this->options['duckcoverage_enable']) {
             return $this;
@@ -549,6 +548,9 @@ class DuckCoverage extends CoverageBase
 --watch {name}
 --stop
 EOT;
+//--watch xx --replay --report
+// --go {name}
+// call 不需要了，在列表里就行了 duckcover
             echo $str;
             return;
         }
