@@ -38,6 +38,10 @@ class CoverageBaseTest extends \PHPUnit\Framework\TestCase
         }
         CoverageBase::End();
         CoverageBase::_()->createReport($groups =[]);
+
+        CoverageBase::_()->getCoverage();
+        CoverageBaseEx::_()->testWatching();
+
         //LibCoverage::_()->cleanDirectory($path);
         LibCoverage::End();
     }
@@ -65,7 +69,12 @@ EOT;
 }
 class CoverageBaseEx  extends  CoverageBase
 {
-
+    public function testWatching()
+    {
+        $this->watchingBegin("mygroup1");
+        $this->watchingGetName();
+        $this->watchingEnd();
+    }
 }
 class MyGroupCoverageRunner extends GroupCoverageRunner
 {
