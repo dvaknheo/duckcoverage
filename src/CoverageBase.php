@@ -58,8 +58,7 @@ class CoverageBase
     }
     protected static function SlashDir($path)
     {
-        $path = (string)$path;
-        return $path !== '' ? rtrim($path, '/\\') . DIRECTORY_SEPARATOR : '';
+        return ($path !== '') ? rtrim( str_replace(['/', '\\'], DIRECTORY_SEPARATOR, (string)$path), '/\\') . DIRECTORY_SEPARATOR : '';
     }
     protected function getSubPath($path_key)
     {
@@ -75,24 +74,22 @@ class CoverageBase
         $this->is_inited = true;
         return $this;
     }
+    protected function getRunner()
+    {
+        return GroupCoverageRunner::_();
+    }
     public function doBegin()
     {
-        GroupCoverageRunner::_()->init([
-            'path_src' => $this->getSubPath('duckcoverage_path_src'),
-            'path_dump' => $this->getSubPath('duckcoverage_path_dump'),
-        ])->doBegin(
+        $this->getRunner()->doBegin(
             $this->options['duckcoverage_name'],
-            $this->options['duckcoverage_group']
+            $this->options['duckcoverage_group'],
+            $this->getSubPath('duckcoverage_path_src'),
+            $this->getSubPath('duckcoverage_path_dump')
         );
     }
-    
     public function doEnd()
     {
-        GroupCoverageRunner::_()->doEnd();  //@codeCoverageIgnore
-    }
-    public function getCoverage()
-    {
-        return GroupCoverageRunner::_()->getCoverage();
+        $this->getRunner()->doEnd();  //@codeCoverageIgnore
     }
     protected function getReportPath($groups)
     {
@@ -108,9 +105,7 @@ class CoverageBase
             }
         }
         return $path_report;
-    }
-    protected $path_report = null;
-    
+    }   
     public function createReport($groups =[])
     {
         $path_src = $this->getSubPath('duckcoverage_path_src');
@@ -118,7 +113,7 @@ class CoverageBase
         
         $path_report=$this->getReportPath($groups);
         $this->path_report = $path_report;
-        return GroupCoverageRunner::_()->createReport( $groups, $path_src, $path_dump, $path_report);
+        return $this->getRunner()->createReport( $groups, $path_src, $path_dump, $path_report);
     }
     ////[[[[
     protected function watchingBegin($name)

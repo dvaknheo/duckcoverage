@@ -39,7 +39,6 @@ class CoverageBaseTest extends \PHPUnit\Framework\TestCase
         CoverageBase::End();
         CoverageBase::_()->createReport($groups =[]);
 
-        CoverageBase::_()->getCoverage();
         CoverageBaseEx::_()->testWatching();
 
         //LibCoverage::_()->cleanDirectory($path);
