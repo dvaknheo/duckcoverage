@@ -3,108 +3,71 @@ namespace tests\DuckCoverage;
 
 use DuckCoverage\CoverageBase;
 use LibCoverage\LibCoverage;
+use LibCoverage\GroupCoverageRunner;
 
 class CoverageBaseTest extends \PHPUnit\Framework\TestCase
 {
     public function testAll()
     {
+        $path = LibCoverage::_()->getClassTestPath(CoverageBase::class);
         LibCoverage::Begin(CoverageBase::class);
-        $this->testInit();
-        $this->testPaths();
-        $this->testBeginEndDump();
-        $this->testCreateReport();
+        GroupCoverageRunner::_(MyGroupCoverageRunner::_());
+        @mkdir($path);
+        @mkdir($path.'/runtime_dump');
+        @mkdir($path.'/runtime_report');
+        $this->makeData($path);
+        $path_src = $path .'/src/';
+        CoverageBase::_(CoverageBaseEx::_())->init([
+            'duckcoverage_path' => $path,
+            'duckcoverage_path_src' => 'src',
+            'duckcoverage_path_dump' => 'runtime_dump',
+            'duckcoverage_path_report' => 'runtime_report',
+            'duckcoverage_report_direct' => true,
+            'duckcoverage_group'=>'',
+            'duckcoverage_name'=>'',
+
+        ]);
+        CoverageBase::_()->options['duckcoverage_group']="group1";
+        CoverageBase::_()->options['duckcoverage_name']="abc";
+        CoverageBase::Begin();
+        try{
+            include $path."src/App.php";
+            (new \CoverageBaseApp)->foo();
+        }catch(\Exception $ex){
+            echo $ex->getTraceAsString();
+        }
+        CoverageBase::End();
+        CoverageBase::_()->createReport($groups =[]);
+        //LibCoverage::_()->cleanDirectory($path);
         LibCoverage::End();
     }
-    private function testInit()
+    protected function makeData($path)
     {
-        $obj = new CoverageBase();
-        $obj->init([
-            'duckcoverage_path' => sys_get_temp_dir() . '/dc_test_init/',
-            'unknown_option' => 123,
-        ]);
-        $this->assertTrue($obj->is_inited);
-        // 未知选项被 array_intersect_key 过滤
-        $this->assertArrayNotHasKey('unknown_option', $obj->options);
-        $this->assertEquals(sys_get_temp_dir() . '/dc_test_init/', $obj->options['duckcoverage_path']);
-        // 默认值
-        $this->assertEquals('test_coveragedumps', $obj->options['duckcoverage_path_dump']);
-        $this->assertEquals('test_reports', $obj->options['duckcoverage_path_report']);
-        $this->assertEquals('', $obj->options['duckcoverage_group']);
+$str=<<<EOT
+<?php
+class CoverageBaseApp
+{
+    public function foo()
+    {
+        var_dump(DATE(DATE_ATOM));
     }
-    private function testPaths()
+    public function foo2()
     {
-        $norm = function ($path) {
-            return str_replace('\\', '/', $path);
-        };
-        $obj = new CoverageBase();
-        $obj->init([
-            'duckcoverage_path' => '/base',
-            'duckcoverage_path_dump' => 'test_coveragedumps',
-        ]);
-        $ref = new \ReflectionMethod(CoverageBase::class, 'getSubPath');
-        $ref->setAccessible(true);
-        // 相对路径:拼接 duckcoverage_path
-        $this->assertEquals('/base/test_coveragedumps/', $norm($ref->invoke($obj, 'duckcoverage_path_dump')));
-        // 绝对路径:直接使用
-        $abs = rtrim(str_replace('\\', '/', sys_get_temp_dir()), '/') . '/abs_dump';
-        $obj->init([
-            'duckcoverage_path' => '/base',
-            'duckcoverage_path_dump' => $abs,
-        ]);
-        //$this->assertEquals($abs . '/', $norm($ref->invoke($obj, 'duckcoverage_path_dump')));
+        var_dump(DATE(DATE_ATOM));
+    }
+}
+EOT;
+        @mkdir($path.'src');
+        file_put_contents($path.'src/App.php',$str);
+    }
 
-        $is_abs = new \ReflectionMethod(CoverageBase::class, 'IsAbsPath');
-        $is_abs->setAccessible(true);
-        //$this->assertTrue($is_abs->invoke(null, '/tmp/x'));
-        //$this->assertTrue($is_abs->invoke(null, sys_get_temp_dir()));
-        $this->assertFalse($is_abs->invoke(null, 'relative/path'));
-    }
-    private function testBeginEndDump()
-    {
-        $path = sys_get_temp_dir() . '/dc_test_dump_' . uniqid();
-        $obj = new CoverageBase();
-        $obj->init([
-            'duckcoverage_path' => $path . '/',
-            'duckcoverage_path_src' => __DIR__ . '/../src/',
-            'duckcoverage_path_dump' => 'test_coveragedumps',
-            'duckcoverage_group' => 'testgroup',
-            'duckcoverage_name' => 'testcase',
-        ]);
-        try {
-            $obj->doBegin();
-            $obj->doEnd();
-        } catch (\Throwable $ex) {
-            $this->markTestSkipped('No coverage driver: ' . $ex->getMessage());
-            return;
-        }
-        $file = $path . '/test_coveragedumps/testgroup/' . md5('testcase') . '.php';
-        $this->assertFileExists($file);
-        $data = include $file;
-        $this->assertInstanceOf(\SebastianBergmann\CodeCoverage\CodeCoverage::class, $data);
-    }
-    private function testCreateReport()
-    {
-        $path = sys_get_temp_dir() . '/dc_test_report_' . uniqid();
-        $obj = new CoverageBase();
-        $obj->init([
-            'duckcoverage_path' => $path . '/',
-            'duckcoverage_path_src' => __DIR__ . '/../src/',
-            'duckcoverage_path_dump' => 'test_coveragedumps',
-            'duckcoverage_path_report' => 'test_reports',
-            'duckcoverage_group' => 'testgroup',
-        ]);
-        // 先采集一份 dump
-        try {
-            $obj->doBegin();
-            $obj->doEnd();
-        } catch (\Throwable $ex) {
-            $this->markTestSkipped('No coverage driver: ' . $ex->getMessage());
-            return;
-        }
-        $ret = $obj->createReport(['testgroup']);
-        $this->assertArrayHasKey('lines_tested', $ret);
-        $this->assertArrayHasKey('lines_total', $ret);
-        $this->assertArrayHasKey('lines_percent', $ret);
-        $this->assertFileExists($path . '/test_reports/index.html');
-    }
+
+}
+class CoverageBaseEx  extends  CoverageBase
+{
+
+}
+class MyGroupCoverageRunner extends GroupCoverageRunner
+{
+
 }

@@ -17,14 +17,4 @@ $options=[
     //'path_report' => 'test_reports',
     //'path_data' => 'tests/data_for_tests',
 ];
-
-try {
-    LibCoverage\LibCoverage::_()->init($options);
-} catch (\Throwable $ex) {
-
-}
-
-/**
- * 探测覆盖率驱动是否可用(xdebug/pcov)。
- * 注意:不能依赖 LibCoverage::G()->isInited()——libcoverage 的 is_inited 默认就是 true。
- */
+LibCoverage\LibCoverage::_()->init($options);

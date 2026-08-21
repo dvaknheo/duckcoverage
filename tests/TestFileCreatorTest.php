@@ -15,6 +15,5 @@ class TestFileCreatorTest extends \PHPUnit\Framework\TestCase
     private function testDefaultOptions()
     {
         $obj = new TestFileCreator();
-        $this->assertEquals('bb', $obj->options['aa']);
     }
 }

@@ -22,6 +22,7 @@
     },
     "require": {
         "php": ">=7.4.0",
+        "dvaknheo/duckphp": "1.4.1",
         "dvaknheo/libcoverage": "1.0.8"
     },
     "repositories": [
