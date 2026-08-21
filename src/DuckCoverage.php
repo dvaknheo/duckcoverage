@@ -40,13 +40,13 @@ class DuckCoverage extends CoverageBase
         'duckcoverage_path_document' => 'public',
         'duckcoverage_homepage' => '/index_dev.php/',
         'duckcoverage_new_server' => true,
-        
 
-        //'duckcoverage_callback_class' => null,
+        'duckcoverage_echo_back' => false,
+
+
         'duckcoverage_callback' => null,
         'duckcoverage_save_web_request_list' => true,
         'duckcoverage_save_local_call_list' => false,
-        'duckcoverage_echo_back' => false,
 
     ];
     public $session_id = '';   // 兼容保留（不再用于请求）；会话改为连续传递所有 cookie
@@ -57,6 +57,8 @@ class DuckCoverage extends CoverageBase
     }
     public function beforeInit()
     {
+        // 我们还要检查有没有开启调试模式，有没有 drvier 。 不需要在 Ext 里加后续 Init;，自己加
+        // 有没有在 root;
         if(App::_()->options['duckcoverage_enable']) {
             App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
             App::_()->options['data_file_enable'] = true;
@@ -83,7 +85,6 @@ class DuckCoverage extends CoverageBase
             $this->options['duckcoverage_group'] = $watching_group;
         }
 
-        // 注册 duckcover 命令行命令（不依赖 onInit 全局事件，旧版 duckphp 机制已移除）
         App::_()->regConsoleCommand(static::class, 'command_');
 
         // web 收集:isInHttpTest() 命中时 _OnBeforeRun(doBegin),
@@ -97,21 +98,7 @@ class DuckCoverage extends CoverageBase
             });
         }
 
-        // 这里要改成 DuckPhp 里的
-        // cli 收集:#CMD 回放时父进程通过 MYCOVERAGE_NAME 环境变量传入组名,
-        // 命中时进程启动即 doBegin,shutdown 时 doEnd,实现命令行测试采集
-        if (PHP_SAPI === 'cli') {
-            $cli_group = (string) getenv('MYCOVERAGE_NAME');
-            if ($cli_group !== '') {
-                $this->options['duckcoverage_group'] = $cli_group;
-                $argv_str = implode(' ', array_slice(Helper::SERVER('argv', []), 1));
-                $this->options['duckcoverage_name'] = 'cli ' . date('ymdHis') . '-' . (getmypid() ?: 0) . ' ' . $argv_str;
-                $this->doBegin();
-                SystemWrapper::register_shutdown_function(function () {
-                    DuckCoverage::_()->doEnd();
-                });
-            }
-        }
+
         return $this;
     }
     public function isInHttpTest()
@@ -121,17 +108,6 @@ class DuckCoverage extends CoverageBase
         //$server_name = $_SERVER['HTTP_X_MYCOVERAGE_NAME']??'';
         if ($watching_name && $watching_name === $server_name) {
             return true;
-        }
-        return false;
-    }
-    public function isInCliTest()
-    {
-        if (PHP_SAPI === 'cli' && App::_()->options['cli_enable']) {
-            $argv = Helper::SERVER('argv', []);
-            $cmd = $argv[1] ?? 'NULL';
-            if ($cmd === 'duckcover') {
-                return true;
-            }
         }
         return false;
     }
@@ -234,14 +210,25 @@ class DuckCoverage extends CoverageBase
     }
     protected function readCommand($request)
     {
-        $request = trim($request);
+        $request = ltrim($request);
         if (!$request) {
             return;
         }
-        if (substr($request, 0, 2) === '##') {
-            return;
+        $map =[
+            '#PHASE' => 'explainPhase',
+            '#CALL' => 'explainCall',
+            '#WEB' => 'explainWeb',
+            '#SETWEB' => 'explainSetWeb',
+            '#CMD' => 'explainCmd',
+        ];
+        $flag = preg_match('/^(\S+)\S/',$request,$m);
+        if($flag){
+            $call = $m[0];
+            ($this->$call)($request);
         }
-        // 头部指令:#PHASE {phase} 直接切换当前 phase;#URL_PREFIX {prefix} 记录 URL 前缀
+    }
+    protected function explainPhase($request)
+    {
         if (substr($request, 0, strlen('#PHASE ')) === '#PHASE ') {
             $phase = trim(substr($request, strlen('#PHASE ')));
             if ($phase === '') {
@@ -250,24 +237,8 @@ class DuckCoverage extends CoverageBase
             App::Phase($phase);
             return;
         }
-        if (substr($request, 0, strlen('#URL_PREFIX')) === '#URL_PREFIX') {
-            $this->current_url_prefix = trim(substr($request, strlen('#URL_PREFIX')));
-            return;
-        }
-        if (substr($request, 0, strlen('#CALL ')) === '#CALL ') {
-            $this->explainCall($request);
-        }
-        if (substr($request, 0, strlen('#WEB ')) === '#WEB ') {
-            $this->explainWeb($request);
-        }
-        if (substr($request, 0, strlen('#SETWEB ')) === '#SETWEB ') {
-            $this->explainSetWeb($request);
-        }
-        if (substr($request, 0, strlen('#CMD ')) === '#CMD ') {
-            $this->explainCmd($request);
-        }
-    }
 
+    }
     protected function explainWeb($request)
     {
         @list($command, $uri, $poststr, $method) = explode(' ', $request);
@@ -320,7 +291,7 @@ class DuckCoverage extends CoverageBase
     }
     protected function explainSetweb($request)
     {
-        @list($command, $pre_curl, $pre_webcall, $post_webcall, $post_curl) = explode(' ', $request);
+        @list($command, $pre_curl, $pre_webcall, $post_webcall, $post_curl) = explode(' ', trim($request));
         if ($command !== '#SETWEB') {
             return;
         }
@@ -333,30 +304,9 @@ class DuckCoverage extends CoverageBase
     }
     protected function explainCmd($request)
     {
-        @list($command, $cmd) = explode(' ', $request, 2);
-        if ($command !== '#CMD') {
-            return;
-        }
-        $cmd = trim($cmd);
-        if ($cmd === '') {
-            return;
-        }
-        // 通过 MYCOVERAGE_NAME 环境变量把组名传给子进程,
-        // 使子进程的 DuckPHP CLI 入口在 init 时命中 cli 采集分支(见 init)
-        // 注意:PHP 8.0 起 putenv() 不再支持无 '=' 的删除用法,统一用 'NAME=' 空值形式
-        $group = (string) ($this->options['duckcoverage_group'] ?? '');
-        $old_env = getenv('MYCOVERAGE_NAME');
-        putenv('MYCOVERAGE_NAME=' . $group);
-        try {
-            echo $cmd . "\n";
-            passthru($cmd, $exit_code);
-        } finally {
-            // 恢复父进程环境变量(空值即删除)
-            putenv('MYCOVERAGE_NAME=' . ($old_env === false ? '' : $old_env));
-        }
-        if ($exit_code !== 0) {
-            echo static::class . " #CMD exit code = {$exit_code}\n";
-        }
+        // 这里应该用的是 DuckPhp 的 Console Call
+        // 把命令行转成 argv;
+        Console::_()->run();
     }
     ////////////////////////////////////////////////////////////////////////////
     /**
@@ -400,9 +350,6 @@ class DuckCoverage extends CoverageBase
      */
     public function command_duckcover()
     {
-        /*
-        $handler = "DuckAdmin\\Test\\Tester@_justTest?parameter=d";
-        */
         $p = Console::_()->getCliParameters();
         if ($p['help'] ?? false || count($p) === 1) {
             $str = <<<EOT
