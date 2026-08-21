@@ -11,7 +11,6 @@ use DuckPhp\Core\Console;
 use DuckPhp\Core\ExitException;
 use DuckPhp\Core\SystemWrapper;
 use DuckPhp\Foundation\Helper;
-use DuckPhp\HttpServer\HttpServer;
 
 #CALL
 #WEB url post
@@ -19,6 +18,8 @@ use DuckPhp\HttpServer\HttpServer;
 
 class DuckCoverage extends CoverageBase
 {
+    use HttpServerTrait, HttpClientTrait;
+
     //todo use  global singletonex to replace default singleton function
     public $options = [
         'duckcoverage_enable' => true,
@@ -49,8 +50,6 @@ class DuckCoverage extends CoverageBase
 
     ];
     public $session_id = '';   // 兼容保留（不再用于请求）；会话改为连续传递所有 cookie
-    protected $cookies = [];   // 所有 cookie（name => value），随响应 Set-Cookie 持续更新
-    protected $post = [];
     public function __construct()
     {
         $this->options = array_replace_recursive($this->options, (new parent())->options); //merge parent's options;
@@ -215,10 +214,6 @@ class DuckCoverage extends CoverageBase
         return $this->callObject($class, $method, $type, $function, $parameters, $ext_args);
     }
     //////////////////
-    protected function cleanClientStatus()
-    {
-        $this->cookies = [];
-    }
     protected function replay()
     {
         $this->cleanClientStatus();
@@ -272,145 +267,7 @@ class DuckCoverage extends CoverageBase
             $this->explainCmd($request);
         }
     }
-    protected $current_url_prefix = '';
 
-    protected $pre_curl;
-    protected $post_curl;
-    protected $pre_webcall;
-    protected $post_webcall;
-    public function prepareCurl($ch)
-    {
-        $this->headers[] = 'X-MyCoverage-Name: ' . $this->watchingGetName();
-        if ($this->pre_webcall) {
-            $this->headers[] = 'X-MyCoverage-BeforeRun: ' . $this->pre_webcall;
-            $this->pre_webcall = null;
-        }
-        if ($this->post_webcall) {
-            $this->headers[] = 'X-MyCoverage-AfterRun: ' . $this->post_webcall;
-            $this->post_webcall = null;
-        }
-        $pre_curl = $this->pre_curl;
-        $this->pre_curl = null;
-
-        //////////////////////////
-        if (!$pre_curl || $pre_curl === '_') {
-            return $ch;
-        }
-
-        if ($pre_curl === 'AJAX') {
-            $this->headers[] = 'X-Requested-With: XMLHttpRequest';
-            return $ch;
-        }
-        if ($pre_curl === 'OPTIONS') {
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'OPTIONS');
-            return $ch;
-        }
-        $this->callHandler($pre_curl, [$ch, 'pre']);
-        return $ch;
-    }
-    public function postpareCurl($ch)
-    {
-        $post_curl = $this->post_curl;
-        $this->post_curl = null;
-
-        $this->callHandler($post_curl, [$ch, 'post']);
-    }
-    protected $headers = [];
-    protected function curl_file_get_contents($url, $post = [], $is_ajax = false, $is_options = false, $method = '')
-    {
-        $ch = curl_init();
-
-        if (is_array($url)) {
-            list($base_url, $real_host) = $url;
-            $url = $base_url;
-            $host = parse_url($url, PHP_URL_HOST);
-            $port = parse_url($url, PHP_URL_PORT);
-            $c = $host . ':' . $port . ':' . $real_host;
-            curl_setopt($ch, CURLOPT_CONNECT_TO, [$c]);
-        }
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        //curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1); 
-
-        // 始终抓取响应头，以收集/更新所有 Set-Cookie
-        curl_setopt($ch, CURLOPT_HEADER, 1);
-
-        if (!empty($post)) {
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
-        }
-        /////////
-        // 连续传递所有已收集的 cookie（不再只传 PHPSESSID）
-        if (!empty($this->cookies)) {
-            $cookie_str = [];
-            foreach ($this->cookies as $name => $value) {
-                $cookie_str[] = $name . '=' . $value;
-            }
-            curl_setopt($ch, CURLOPT_COOKIE, implode('; ', $cookie_str));
-        }
-
-        $this->prepareCurl($ch);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
-        $data = curl_exec($ch);
-        $this->headers = [];
-        // 收集响应中的所有 Set-Cookie，同名覆盖（空值/deleted 移除）
-        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        $headers = substr($data, 0, $header_size);
-        $data = substr($data, $header_size);
-        if (preg_match_all('/Set-Cookie:\s*([^=;\s]+)=([^;]*)/i', $headers, $ms)) {
-            foreach ($ms[1] as $i => $name) {
-                $value = trim($ms[2][$i]);
-                if ($value === '' || strcasecmp($value, 'deleted') === 0) {
-                    unset($this->cookies[$name]);
-                } else {
-                    $this->cookies[$name] = $value;
-                }
-            }
-        }
-        $this->postpareCurl($ch);
-        echo $url;
-        echo ' ';
-        echo http_build_query($post);
-        echo "\n";
-        //echo $data;
-        curl_close($ch);
-        $data = ($data !== false) ? $data : '';
-        return $data;
-    }
-    ////[[[[
-    protected $is_server_started = false;
-    protected function startServer()
-    {
-        if ($this->is_server_started) {
-            return;
-        }
-        $server_options = [
-            'path' => $this->options['duckcoverage_path_server'],
-            'path_document' => $this->options['duckcoverage_path_document'],
-            'port' => $this->options['duckcoverage_server_port'],
-            'background' => true,
-            'http_app_class' => get_class(App::Root()),
-        ];
-
-        if ($this->options['duckcoverage_new_server']) {
-            HttpServer::_(new HttpServer());
-        }
-        HttpServer::RunQuickly($server_options);
-
-        sleep(1);// ugly
-        echo static::class . " HTTP SERVER PID = " . HttpServer::_()->getPid() . "\n";
-        $this->is_server_started = true;
-    }
-    protected function stopServer()
-    {
-        if (!$this->is_server_started) {
-            return;
-        }
-        HttpServer::_()->close();
-        $this->is_server_started = false;
-    }
-    ////]]]]
-    //////////
     protected function explainWeb($request)
     {
         @list($command, $uri, $poststr, $method) = explode(' ', $request);
