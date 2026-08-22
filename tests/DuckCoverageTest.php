@@ -38,7 +38,7 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $this->cmd("duckcover --report group1");
         $this->cmd("duckcover --go");
 
-        //DuckCoverageApp::_()->testMore();
+        DuckCoverageApp::_()->testMore();
 
         $__SERVER = $_SERVER;
         LibCoverage::_($old);
@@ -97,19 +97,15 @@ EOT;
 }
 class DuckCoverageEx extends DuckCoverage
 {
-    //
+    public function readCommand($request)
+    {
+        return parent::readCommand($request);
+    }
 }
 class DuckCoverageApp extends DuckPhp
 {
     public $options =[
         'duckcoverage_enable'=>true,
-        // 'app'=>[
-        //     DuckPhp::class=>[
-        //         'name'=>'unkown',
-        //         'controller_url_prefix' => 'xxxx',
-        //         //'ext'=>[ DuckCoverage::class => true,],
-        //     ],
-        // ],
     ];
     protected function onPrepare(): void
     {
@@ -119,10 +115,32 @@ class DuckCoverageApp extends DuckPhp
     }
     public function testMore()
     {
-        $this->options['duckcoverage_enable']=false;
+        $this->is_root = false;
         DuckCoverage::_()->init($this->options,null);
-        //$this->is_root=false;
-        //DuckCoverage::_()->init($this->options,null);
+        $this->is_root = true;
+
+        $this->options['duckcoverage_enable']=false;
+        DuckCoverage::_()->options['duckcoverage_enable']=true;
+        DuckCoverage::_()->init($this->options,null);
+        $this->options['duckcoverage_enable']=true;
+
+        $str=<<<EOT
+#PHASE 
+#CALL MyDuckCoverageApp::Callback
+#CMD cmdback
+#SETWEB _ _ _ _
+#WEB /
+
+EOT;
+        $str1=<<<EOT
+#CALL MyDuckCoverageApp::Callback
+#WEB /
+
+EOT;
+        $cmds = explode("\n",$str);
+        foreach($cmds as $cmd){
+            DuckCoverageEx::_()->readCommand($cmd);
+        }
     }
 }
 class DuckCoverageTestList

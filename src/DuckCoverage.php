@@ -69,7 +69,7 @@ class DuckCoverage extends ComponentBase
     }
     public function init(array $options, ?object $context = null)
     {
-        if (!$this->options['duckcoverage_enable']) {
+        if (!$options['duckcoverage_enable']) {
             return $this;
         }
         if (!App::_()->isRoot()) {
@@ -202,9 +202,6 @@ class DuckCoverage extends ComponentBase
     {
         file_put_contents($this->current_path_dump.'readCommand.log',DATE(DATE_ATOM).' '.$request."\n",FILE_APPEND);
         $request = ltrim($request);
-        if (!$request) {
-            return;
-        }
         $map =[
             '#PHASE' => 'explainPhase',
             '#CALL' => 'explainCall',
@@ -230,10 +227,6 @@ class DuckCoverage extends ComponentBase
     protected function explainWeb($request)
     {
         @list($command, $uri, $poststr, $method) = explode(' ', $request);
-
-        if ($command !== '#WEB') {
-            return;
-        }
 
         $base_url = (string) ($this->options['duckcoverage_web_base_url'] ?? '');
         if ($base_url === '') {
@@ -263,10 +256,6 @@ class DuckCoverage extends ComponentBase
     protected function explainSetweb($request)
     {
         @list($command, $pre_curl, $pre_webcall, $post_webcall, $post_curl) = explode(' ', trim($request));
-        if ($command !== '#SETWEB') {
-            return;
-        }
-
         $this->pre_curl = ($pre_curl === '_') ? null : $pre_curl;
         $this->pre_webcall = ($pre_webcall === '_') ? null : $pre_webcall;
         $this->post_webcall = ($post_webcall === '_') ? null : $post_webcall;
