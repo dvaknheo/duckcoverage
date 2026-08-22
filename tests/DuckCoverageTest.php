@@ -38,12 +38,11 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $this->cmd("duckcover --report group1");
         $this->cmd("duckcover --go");
 
-        //$this->makeData($path);
-        //$this->testDefaultOptions();
+        //DuckCoverageApp::_()->testMore();
 
         $__SERVER = $_SERVER;
         LibCoverage::_($old);
-        //LibCoverage::_()->clean
+        //LibCoverage::_()->cleanDirectory($path);
         LibCoverage::End();
     }
     protected function cmd(string $str)
@@ -104,23 +103,27 @@ class DuckCoverageApp extends DuckPhp
 {
     public $options =[
         'duckcoverage_enable'=>true,
+        // 'app'=>[
+        //     DuckPhp::class=>[
+        //         'name'=>'unkown',
+        //         'controller_url_prefix' => 'xxxx',
+        //         //'ext'=>[ DuckCoverage::class => true,],
+        //     ],
+        // ],
     ];
-    public function __construct()
-    {
-        parent::__construct();
-
-    }
     protected function onPrepare(): void
     {
         DuckCoverage::_()->beforeInit(); //mover  json data ;
         parent::onPrepare();
         // something from setting;
     }
-    // public function command_cmdback()
-    // {
-    //     $data = Console::_()->getCliParameters();
-    //     var_dump($data);
-    // }
+    public function testMore()
+    {
+        $this->options['duckcoverage_enable']=false;
+        DuckCoverage::_()->init($this->options,null);
+        //$this->is_root=false;
+        //DuckCoverage::_()->init($this->options,null);
+    }
 }
 class DuckCoverageTestList
 {

@@ -175,20 +175,6 @@ class DuckCoverage extends ComponentBase
         $ret = implode(";", [$time, $uri, $post, $session_id, $method, $ajax]);
         return $ret;
     }
-    protected function callHandler($handler, $ext_args = [])
-    {
-        if (!isset($handler)) {
-            return;
-        }
-        $handler = trim($handler);
-        //$handler = "DuckAdmin\\Test\\Tester@_justTest?parameter=d";
-        $flag = preg_match('/^(([a-zA-Z0-9_\x7f-\xff\\\\]+)(\:\:|\@|\->)([a-zA-Z0-9_\x7f-\xff]+)|([a-zA-Z0-9_\x7f-\xff]+))(\?(\S*))?$/', $handler, $m);
-        if (!$flag) {
-            return false;
-        }
-        @list($_0, $_1, $class, $type, $method, $function, $_6, $parameters) = $m;
-        return $this->callObject($class, $method, $type, $function, $parameters, $ext_args);
-    }
     //////////////////
     protected function replay()
     {
@@ -295,6 +281,20 @@ class DuckCoverage extends ComponentBase
         $_SERVER = $__SERVER;
     }
     ////////////////////////////////////////////////////////////////////////////
+    protected function callHandler($handler, $ext_args = [])
+    {
+        if (!isset($handler)) {
+            return;
+        }
+        $handler = trim($handler);
+        //$handler = "DuckAdmin\\Test\\Tester@_justTest?parameter=d";
+        $flag = preg_match('/^(([a-zA-Z0-9_\x7f-\xff\\\\]+)(\:\:|\@|\->)([a-zA-Z0-9_\x7f-\xff]+)|([a-zA-Z0-9_\x7f-\xff]+))(\?(\S*))?$/', $handler, $m);
+        if (!$flag) {
+            return false;
+        }
+        @list($_0, $_1, $class, $type, $method, $function, $_6, $parameters) = $m;
+        return $this->callObject($class, $method, $type, $function, $parameters, $ext_args);
+    }
     /**
      */
     public function callObject($class, $method, $type, $function, $poststr, $args = [])
