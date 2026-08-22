@@ -41,6 +41,19 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
 
         DuckCoverageApp::_()->testMore();
 
+        /////////////
+        DuckCoverageApp::_(new DuckCoverageApp)->init($options);
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $_SERVER['SERVER_ADDR'] = '127.0.0.1';
+        $_SERVER['HTTP_X_MYCOVERAGE_GROUP'] = 'group1';
+        $_SERVER['HTTP_X_MYCOVERAGE_NAME'] = 'name1';
+        $_SERVER['HTTP_X_MYCOVERAGE_BEFORERUN'] = DuckCoverageApp::class . '::beforerun';
+        $_SERVER['HTTP_X_MYCOVERAGE_AFTERRUN'] = DuckCoverageApp::class . '::afterrun';
+        
+        $_SERVER['REQUEST_URI'] ='/';
+        $_SERVER['PATH_INFO'] ='';
+        DuckCoverageApp::_()->serve();
+
         $__SERVER = $_SERVER;
         LibCoverage::_($old);
         LibCoverage::_()->cleanDirectory($path);
@@ -82,13 +95,6 @@ class MyDuckCoverageApp extends tests\DuckCoverage\DuckCoverageApp
         $data = Console::_()->getCliParameters();
         var_dump($data);
     }
-    public static function Callback()
-    {
-        var_dump(DATE(DATE_ATOM));
-        //$path = LibCoverage::_()->getClassTestPath(DuckCoverage::class);
-        //file_put_contents($path.'x.log',DATE(DATE_ATOM));
-        return;
-    }
 
 }
 
@@ -115,10 +121,22 @@ class DuckCoverageEx extends DuckCoverage
         $this->startServer();
         $this->stopServer();
     }
+    public  function cloze_curl()
+    {
+        $this->curl_file_get_contents(['http://127.0.0.1:8017/',"ai.local.com"]);
+    }
 
 }
 class DuckCoverageApp extends DuckPhp
 {
+    public static function beforerun()
+    {
+        var_dump(DATE(DATE_ATOM));
+    }
+    public static function afterrun()
+    {
+        var_dump(DATE(DATE_ATOM));
+    }
     public static function pre_curl($ch,$name)
     {
         var_dump($name);
@@ -134,6 +152,13 @@ class DuckCoverageApp extends DuckPhp
     public static function post_web()
     {
         var_dump(DATE(DATE_ATOM));
+    }
+    public static function Callback()
+    {
+        var_dump(DATE(DATE_ATOM));
+        //$path = LibCoverage::_()->getClassTestPath(DuckCoverage::class);
+        //file_put_contents($path.'x.log',DATE(DATE_ATOM));
+        return;
     }
 
     public $options =[
@@ -180,13 +205,14 @@ class DuckCoverageApp extends DuckPhp
 
         $str=<<<EOT
 #PHASE 
-#CALL MyDuckCoverageApp::Callback
+#CALL {static}::Callback
 #CMD cmdback
 #SETWEB {static}::pre_curl {static}::pre_web {static}::prost_web {static}::post_curl
 #WEB /
 #WEB / a=b POST
 #SETWEB AJAX _ _ _
 #WEB /
+#CALL {static}::cloze_curl
 #SETWEB OPTIONS _ _ _
 #WEB /
 
@@ -199,6 +225,10 @@ EOT;
             DuckCoverageEx::_()->readCommand($cmd);
         }
         DuckCoverageEx::_()->testRunServer();
+    }
+    public static function cloze_curl()
+    {
+        DuckCoverageEx::_()->cloze_curl();
     }
 }
 class DuckCoverageTestList

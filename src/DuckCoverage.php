@@ -99,11 +99,13 @@ class DuckCoverage extends ComponentBase
     public function prepareForHttp()
     {
         $client_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
-        $server_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
+        $server_ip = SuperGlobal::_()->_SERVER('SERVER_ADDR', '');
         $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
         $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
-
-        if(!$client_ip || !$server_ip || ($client_ip != $server_ip) || !$name || !$group){
+        if($client_ip){
+            var_dump("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
+        }
+        if(!$client_ip || !$server_ip || ($client_ip != $server_ip)  || !$name || !$group){
             return;
         }
         $this->current_name = $name;
@@ -537,7 +539,7 @@ trait HttpClientTrait
             foreach ($ms[1] as $i => $name) {
                 $value = trim($ms[2][$i]);
                 if ($value === '' || strcasecmp($value, 'deleted') === 0) {
-                    unset($this->cookies[$name]);
+                    //unset($this->cookies[$name]);
                 } else {
                     $this->cookies[$name] = $value;
                 }
