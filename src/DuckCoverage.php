@@ -7,33 +7,32 @@
 namespace DuckCoverage;
 
 use DuckPhp\Core\App;
+use DuckPhp\Core\ComponentBase;
 use DuckPhp\Core\Console;
 use DuckPhp\Core\ExitException;
 use DuckPhp\Core\SystemWrapper;
 use DuckPhp\Foundation\Helper;
+use LibCoverage\GroupCoverageRunner;
 
-#CALL
-#WEB url post
-#SETWEB precall preweb postweb postcall
-
-class DuckCoverage extends CoverageBase
+class DuckCoverage extends ComponentBase
 {
-    use HttpServerTrait, HttpClientTrait;
+    use HttpServerTrait;
+    use HttpClientTrait;
 
     //todo use  global singletonex to replace default singleton function
     public $options = [
         'duckcoverage_enable' => true,
         'duckcoverage_data_file_json_file'=> 'DuckPhpData-duckcoverage.config.json',
+        'duckcoverage_callback' => null,
 
         'duckcoverage_path' => '',
-        'duckcoverage_path_src' => 'src/',   // 不需要
+        'duckcoverage_path_src' => 'src/', // 不需要
         'duckcoverage_path_dump' => 'test_coveragedumps',
         'duckcoverage_path_report' => 'test_reports',
-        'duckcoverage_report_direct' => true,
-        'duckcoverage_group'=>'', 
-        'duckcoverage_name'=>'',     // 不需要
+        'duckcoverage_report_direct' => false,
 
-        'duckcoverage_web_base_url' => '',      // 外部服务器(如 nginx)基础 URL,如 http://admin.duckphp-local.com/ ;空则退回内部测试服务器
+        'duckcoverage_web_base_url' => '',
+        // 外部服务器(如 nginx)基础 URL,如 http://admin.duckphp-local.com/ ;空则退回内部测试服务器
         'duckcoverage_server_port' => 8080,
         'duckcoverage_server_host' => '',
         'duckcoverage_path_server' => '',
@@ -42,14 +41,17 @@ class DuckCoverage extends CoverageBase
         'duckcoverage_new_server' => true,
 
         'duckcoverage_echo_back' => false,
-
-
-        'duckcoverage_callback' => null,
         'duckcoverage_save_web_request_list' => true,
-        'duckcoverage_save_local_call_list' => false,
+        //'duckcoverage_save_local_call_list' => false,
 
     ];
-    public $session_id = '';   // 兼容保留（不再用于请求）；会话改为连续传递所有 cookie
+
+    protected $current_group;
+    protected $current_name;
+    protected $current_path_src;
+    protected $current_path_dump;
+
+
     public function __construct()
     {
         $this->options = array_replace_recursive($this->options, (new parent())->options); //merge parent's options;
@@ -63,16 +65,10 @@ class DuckCoverage extends CoverageBase
             App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
             App::_()->options['data_file_enable'] = true;
         }
+        App::_()->options['ext'][static::class] = true;
     }
     public function init(array $options, ?object $context = null)
     {
-        // 必须先于 parent::init() 赋值:runner 在 CoverageBase::init 时对路径做快照,
-        // 否则 getSubPath 会用默认空路径快照,导致 dump 与报告目录错位
-        $this->options['duckcoverage_path'] = Helper::PathOfRuntime();
-        parent::init($options, $context);
-
-        $this->options['duckcoverage_path_server'] = Helper::PathOfProject();
-
         if (!$this->options['duckcoverage_enable']) {
             return $this;
         }
@@ -80,29 +76,37 @@ class DuckCoverage extends CoverageBase
             return $this;
         }
 
-        $watching_group = $this->watchingGetName();
-        if ($watching_group) {
-            $this->options['duckcoverage_group'] = $watching_group;
-        }
+        // 必须先于 parent::init() 赋值:runner 在 CoverageBase::init 时对路径做快照,
+        // 否则 getSubPath 会用默认空路径快照,导致 dump 与报告目录错位
+        $this->options['duckcoverage_path'] = Helper::PathOfRuntime() .'DuckCoverage/';
+        @mkdir( $this->options['duckcoverage_path']);
+
+        $this->current_path_dump = $this->options['duckcoverage_path'];
+        $this->current_path_src = Helper::PathOfProject() .$this->options['duckcoverage_path_src'];
+
+        parent::init($options, $context); //这行要去掉
+
+        $this->options['duckcoverage_path_server'] =  $this->options['duckcoverage_path_server'] ? $this->options['duckcoverage_path_server'] : Helper::PathOfProject();
+
+
+        $this->options['duckcoverage_path'] = Helper::PathOfRuntime() .'DuckCoverage/';
+        $this->current_path_dump = $this->options['duckcoverage_path'];
+
+        $this->current_path_src = Helper::PathOfProject() .$this->options['duckcoverage_path_src'];
 
         App::_()->regConsoleCommand(static::class, 'command_');
-
-        // web 收集:isInHttpTest() 命中时 _OnBeforeRun(doBegin),
-        // 并用 SystemWrapper::register_shutdown_function 在请求结束注册 _OnAfterRun(doEnd)
-        ExitException::Init(); //__define(__ExitException);
-
         if ($this->isInHttpTest()) {
+            ExitException::Init();
             DuckCoverage::_()->_OnBeforeRun();
             SystemWrapper::register_shutdown_function(function () {
                 DuckCoverage::_()->_OnAfterRun();
             });
         }
-
-
         return $this;
     }
     public function isInHttpTest()
     {
+        //TODO 安全问题
         $watching_name = $this->watchingGetName();
         $server_name = Helper::SERVER('HTTP_X_MYCOVERAGE_NAME', '');
         //$server_name = $_SERVER['HTTP_X_MYCOVERAGE_NAME']??'';
@@ -113,20 +117,17 @@ class DuckCoverage extends CoverageBase
     }
     public function _OnBeforeRun()
     {
-        if (!$this->options['duckcoverage_group']) {
-            return;
-        }
+        $group = $this->watchingGetName();
 
         if ($this->options['duckcoverage_save_web_request_list'] ?? false) {
             $path_dump = $this->getSubPath('duckcoverage_path_dump');
             @mkdir($path_dump);
-            file_put_contents($path_dump . $this->options['duckcoverage_group'] . '.list', $this->getHttpStringToLog() . "\n", FILE_APPEND);
+            file_put_contents($path_dump . $group . '.list', $this->getHttpStringToLog() . "\n", FILE_APPEND);
         }
 
-
-        $this->options['duckcoverage_name'] = $this->getTestName(); //???
-        //// TODO save list
-
+        $name = $this->getTestName();
+        $this->current_group = $group;
+        $this->current_name = $name;
 
         $before_run = Helper::SERVER('HTTP_X_MYCOVERAGE_BEFORERUN', '');
         if ($before_run) {
@@ -138,7 +139,6 @@ class DuckCoverage extends CoverageBase
 
     public function _OnAfterRun()
     {
-
         $after_run = Helper::SERVER('HTTP_X_MYCOVERAGE_AFTERRUN', '');
         if ($after_run) {
             $this->callHandler($after_run);
@@ -193,20 +193,24 @@ class DuckCoverage extends CoverageBase
     protected function replay()
     {
         $this->cleanClientStatus();
-        $this->doBegin();
-
-        $this->options['duckcoverage_name'] = 'replay';
-
         $callback = $this->options['duckcoverage_callback'] ?? null;
         $test_list = $callback();
         $test_list = \explode("\n", $test_list);
 
+        $this->current_group = $this->watchingGetName();
         foreach ($test_list as $line) {
+            $str = (new \DateTime())->format('Y-m-d H:i:s.v');
+            $name = "[$str]".$line;
+            $this->doBegin(
+                $name,
+                $this->current_group,
+                $this->current_path_src,
+                $this->current_path_dump
+            );
             $this->readCommand($line);
+            $this->doEnd();
         }
         $this->stopServer();
-
-        $this->doEnd();
     }
     protected function readCommand($request)
     {
@@ -221,19 +225,19 @@ class DuckCoverage extends CoverageBase
             '#SETWEB' => 'explainSetWeb',
             '#CMD' => 'explainCmd',
         ];
-        $flag = preg_match('/^(\S+)\S/',$request,$m);
+        $flag = preg_match('/^(\S+)\s+(.*)/',$request,$m);
         if($flag){
-            $call = $m[0];
-            ($this->$call)($request);
+            $call = ucfirst(substr(strtolower($m[0]),1));
+            $method = "explain".$call;
+            if(method_exists($this, $method)){
+                ($this->$method)($request);
+            }
         }
     }
     protected function explainPhase($request)
     {
         if (substr($request, 0, strlen('#PHASE ')) === '#PHASE ') {
             $phase = trim(substr($request, strlen('#PHASE ')));
-            if ($phase === '') {
-                return; // 空 phase 忽略,避免 setCurrentContainer('') 切到不存在的 phase
-            }
             App::Phase($phase);
             return;
         }
@@ -251,6 +255,7 @@ class DuckCoverage extends CoverageBase
         if ($base_url === '') {
             // 未配置外部服务器(如 nginx)时,退回内部 PHP 测试服务器
             $this->startServer();
+            //$this->getServerBaseUrl();
             $base_url = "http://127.0.0.1:{$this->options['duckcoverage_server_port']}" . $this->options['duckcoverage_homepage'];
         }
         $post = [];
@@ -260,10 +265,6 @@ class DuckCoverage extends CoverageBase
         $is_ajax = ($method === 'AJAX') ? true : false;
         $is_options = ($method === 'OPTIONS') ? true : false;
 
-        // 命令未带 URL 前缀时,按 #URL_PREFIX 指令补前缀
-        if ($this->current_url_prefix !== '' && strpos($uri, $this->current_url_prefix) !== 0) {
-            $uri = $this->current_url_prefix . $uri;
-        }
         $url = $base_url . $uri;
         $data = $this->curl_file_get_contents($url, $post, $is_ajax, $is_options, $method);
         if ($this->options['duckcoverage_echo_back'] ?? false) {
@@ -277,7 +278,7 @@ class DuckCoverage extends CoverageBase
             return;
         }
 
-        $this->options['duckcoverage_name'] = $command;
+        $this->current_name = $command;
 
         ////[[[[
         //// save list
@@ -350,64 +351,111 @@ class DuckCoverage extends CoverageBase
      */
     public function command_duckcover()
     {
+        @mkdir($this->current_path_dump);
         $p = Console::_()->getCliParameters();
         if ($p['help'] ?? false || count($p) === 1) {
             $str = <<<EOT
+--watch {group}
 --replay
---report [a b c]
---call SomeApp/Test/Tester@runX
---watch {name}
 --stop
+--report a
+--report a b c
+--go {group}
 EOT;
-//--watch xx --replay --report
-// --go {name}
-// call 不需要了，在列表里就行了 duckcover
             echo $str;
             return;
         }
         if ($p['watch'] ?? false) {
-            if ($p['watch'] === true) {
-                $p['watch'] = DATE('Y_m_d_H_i_s');
+            $watch_name = $p['watch'];
+            if ($watch_name === true) {
+                $watch_name = 'default_'. DATE('Y_m_d_H_i_s');
             }
-            $this->watchingBegin($p['watch']);
-            $this->options['duckcoverage_group'] = $p['watch'];
-            echo "watching {$p['watch']}\n";
+            $this->watchingBegin($watch_name);
+            $this->options['duckcoverage_group'] =  $watch_name;
+            echo "watching {$watch_name}\n";
         }
         if ($p['stop'] ?? false) {
             $this->watchingEnd();
         }
         if ($p['replay'] ?? false) {
             $this->replay();
-        }
-        if ($p['call'] ?? false) {
-            if (is_string($p['call'])) {
-                $command = $p['call'];
-                $this->options['duckcoverage_name'] = 'call ' . $command;
-                $func = str_replace('/', '\\', $command);
-                $this->doBegin();
-                try {
-                    $this->callHandler($func);
-                } catch (\Throwable $ex) {
-                    var_dump($ex);
-                }
-                $this->doEnd();
-            }
+            echo "replaying";
         }
 
         if ($p['report'] ?? false) {
             echo "reporting...\n";
-
-            $groups = is_array($p['report']) ? $p['report'] : [$this->options['duckcoverage_group']];
-
-            $time_begin = microtime(true);
-            $path_group = $this->getReportPath($groups);
-            $this->createReport($groups);
-            $time_end = microtime(true);
-            $time_cost = $time_end - $time_begin;
-            $time_cost = sprintf('%0.3f', $time_cost);
-            echo "time_cost   : $time_cost seconds \noutput path : $path_group \n";
+            $groups = $p['report'];
+            if ($groups === true) {
+                $groups = $this->watchingGetName();
+            }
+            $this->doReport($groups);
+            
         }
-        //var_dump(__FILE__,__LINE__,DATE(DATE_ATOM));
+        if ($p['go'] ?? false) {
+           $watch_name = $p['go'];
+            if ($watch_name === true) {
+                $watch_name = 'default_'. DATE('Y_m_d_H_i_s');
+            }
+            $this->watchingBegin($watch_name);
+            $this->options['duckcoverage_group'] =  $watch_name;
+            echo "watching {$watch_name}\n";
+            $this->replay();
+            $this->watchingEnd();
+            $this->doReport([$watch_name]);
+        }
+    }
+    protected function doReport($groups)
+    {
+        $groups = is_array($groups)?$groups:[$groups];
+        $time_begin = microtime(true);
+
+        $path_report = $this->current_path_dump;
+        if (count($groups)===1 && !$this->options['duckcoverage_report_direct']) {
+            $path_report = $path_report. $groups[0].'.report';
+        } else {
+            $path_report = $path_report.'AAAAA.report';
+        }
+        $this->createReport($groups,$this->current_path_src,$this->current_path_dump,$path_report);
+        $time_end = microtime(true);
+        $time_cost = $time_end - $time_begin;
+        $time_cost = sprintf('%0.3f', $time_cost);
+        echo "time_cost   : $time_cost seconds \noutput path : $path_report \n";
+    }
+    ////]]]]
+    ////[[[[
+    protected function watchingBegin($name)
+    {
+        file_put_contents($this->current_path_dump. $name.'.watch.lock',DATE(DATE_ATOM));
+        file_put_contents($this->current_path_dump.'DuckCoverage.watching.txt',$name);
+    }
+    protected function watchingEnd()
+    {
+        $name = $this->watchingGetName();
+        @unlink($this->options['duckcoverage_path']. basename($name).'.watch.lock',);
+        @unlink($this->options['duckcoverage_path'].'DuckCoverage.watching.txt');
+    }
+    protected function watchingGetName()
+    {
+        $group = @file_get_contents($this->options['duckcoverage_path'].'DuckCoverage.watching.txt');
+        return $group;    
+    }
+    ////]]]]
+    ////[[[[
+    protected function getRunner()
+    {
+        return GroupCoverageRunner::_();
+    }
+    public function doBegin($name, $group, $path_src, $path_dump)
+    {
+        $this->getRunner()->doBegin($name, $group, $path_src, $path_dump);
+    }
+    public function doEnd()
+    {
+        $this->getRunner()->doEnd();  // @codeCoverageIgnore
+    }
+    public function createReport($groups, $path_src, $path_dump, $path_report)
+    {
+        return $this->getRunner()->createReport( $groups, $path_src, $path_dump, $path_report);
     }
     ////]]]]
 }
