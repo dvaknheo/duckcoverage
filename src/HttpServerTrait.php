@@ -24,6 +24,7 @@ trait HttpServerTrait
             'port' => $this->options['duckcoverage_server_port'],
             'background' => true,
             'http_app_class' => get_class(App::Root()),
+            'workers' => 2,
         ];
 
         if ($this->options['duckcoverage_new_server']) {
