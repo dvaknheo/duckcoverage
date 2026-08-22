@@ -12,6 +12,7 @@ use DuckPhp\Core\Console;
 use DuckPhp\Core\ExitException;
 use DuckPhp\Core\SystemWrapper;
 use DuckPhp\Foundation\Helper;
+use DuckPhp\HttpServer\HttpServer;
 use LibCoverage\GroupCoverageRunner;
 
 class DuckCoverage extends ComponentBase
@@ -23,12 +24,12 @@ class DuckCoverage extends ComponentBase
     public $options = [
         'duckcoverage_enable' => true,
         'duckcoverage_data_file_json_file'=> 'DuckPhpData-duckcoverage.config.json',
+        'duckcoverage_reg_console_command' => true,
         'duckcoverage_callback' => null,
 
         'duckcoverage_path' => '',
-        'duckcoverage_path_src' => 'src/', // 不需要
+        'duckcoverage_path_src' => 'src/', // 需要
         'duckcoverage_path_dump' => 'test_coveragedumps',
-        'duckcoverage_path_report' => 'test_reports',
         'duckcoverage_report_direct' => false,
 
         'duckcoverage_web_base_url' => '',
@@ -37,7 +38,7 @@ class DuckCoverage extends ComponentBase
         'duckcoverage_server_host' => '',
         'duckcoverage_path_server' => '',
         'duckcoverage_path_document' => 'public',
-        'duckcoverage_homepage' => '/index_dev.php/',
+        'duckcoverage_homepage' => '/',
         'duckcoverage_new_server' => true,
 
         'duckcoverage_echo_back' => false,
@@ -79,10 +80,11 @@ class DuckCoverage extends ComponentBase
         // 必须先于 parent::init() 赋值:runner 在 CoverageBase::init 时对路径做快照,
         // 否则 getSubPath 会用默认空路径快照,导致 dump 与报告目录错位
         $this->options['duckcoverage_path'] = Helper::PathOfRuntime() .'DuckCoverage/';
-        @mkdir( $this->options['duckcoverage_path']);
+        @mkdir($this->options['duckcoverage_path']);
 
         $this->current_path_dump = $this->options['duckcoverage_path'];
         $this->current_path_src = Helper::PathOfProject() .$this->options['duckcoverage_path_src'];
+        @mkdir($this->current_path_dump);
 
         parent::init($options, $context); //这行要去掉
 
@@ -94,47 +96,40 @@ class DuckCoverage extends ComponentBase
 
         $this->current_path_src = Helper::PathOfProject() .$this->options['duckcoverage_path_src'];
 
-        App::_()->regConsoleCommand(static::class, 'command_');
-        if ($this->isInHttpTest()) {
-            ExitException::Init();
-            DuckCoverage::_()->_OnBeforeRun();
-            SystemWrapper::register_shutdown_function(function () {
-                DuckCoverage::_()->_OnAfterRun();
-            });
+        if ($this->options['duckcoverage_reg_console_command']) {
+            App::_()->regConsoleCommand(static::class, 'command_');
         }
+        $this->prepareForHttp();
         return $this;
     }
-    public function isInHttpTest()
+    public function prepareForHttp()
     {
         //TODO 安全问题
+
         $watching_name = $this->watchingGetName();
         $server_name = Helper::SERVER('HTTP_X_MYCOVERAGE_NAME', '');
         //$server_name = $_SERVER['HTTP_X_MYCOVERAGE_NAME']??'';
-        if ($watching_name && $watching_name === $server_name) {
-            return true;
+        if (!($watching_name && $watching_name === $server_name)) {
+            return;
         }
-        return false;
+        
+        ExitException::Init();
+        $this->_OnBeforeRun();
+        SystemWrapper::register_shutdown_function(function () {
+            $this->_OnAfterRun();
+        });
     }
     public function _OnBeforeRun()
     {
-        $group = $this->watchingGetName();
-
-        if ($this->options['duckcoverage_save_web_request_list'] ?? false) {
-            $path_dump = $this->getSubPath('duckcoverage_path_dump');
-            @mkdir($path_dump);
-            file_put_contents($path_dump . $group . '.list', $this->getHttpStringToLog() . "\n", FILE_APPEND);
-        }
-
-        $name = $this->getTestName();
-        $this->current_group = $group;
-        $this->current_name = $name;
+        $this->current_group = $this->watchingGetName();
+        $this->current_name = $this->getTestName();
 
         $before_run = Helper::SERVER('HTTP_X_MYCOVERAGE_BEFORERUN', '');
         if ($before_run) {
             $this->callHandler($before_run);
         }
 
-        $this->doBegin($name, $this->current_group, $this->current_path_src, $this->current_path_dump);
+        $this->doBegin($this->current_name, $this->current_group, $this->current_path_src, $this->current_path_dump);
     }
 
     public function _OnAfterRun()
@@ -142,25 +137,10 @@ class DuckCoverage extends ComponentBase
         $after_run = Helper::SERVER('HTTP_X_MYCOVERAGE_AFTERRUN', '');
         if ($after_run) {
             $this->callHandler($after_run);
-
         }
         $this->doEnd();
     }
-    protected function getHttpStringToLog()
-    {
-        $data = '';
-        $post = Helper::POST();
-        $post = http_build_query($post);
 
-        $uri = Helper::SERVER('REQUEST_URI', '');
-        $data .= $uri;
-
-        if ($post) {
-            $data .= " {$post}";
-        }
-        $data .= "\n";
-        return $data;
-    }
     protected function getTestName()
     {
         $time = date('ymdHis.', $_SERVER['REQUEST_TIME']) . sprintf('%03d', ($_SERVER['REQUEST_TIME_FLOAT'] - (int) $_SERVER['REQUEST_TIME_FLOAT']) * 1000);
@@ -437,4 +417,160 @@ EOT;
         return $this->getRunner()->createReport( $groups, $path_src, $path_dump, $path_report);
     }
     ////]]]]
+}
+trait HttpServerTrait
+{
+    protected $is_server_started = false;
+
+    protected function startServer()
+    {
+        if ($this->is_server_started) {
+            return;
+        }
+        $server_options = [
+            'path' => $this->options['duckcoverage_path_server'],
+            'path_document' => $this->options['duckcoverage_path_document'],
+            'port' => $this->options['duckcoverage_server_port'],
+            'background' => true,
+            'http_app_class' => get_class(App::Root()),
+            'workers' => 2,
+        ];
+
+        if ($this->options['duckcoverage_new_server']) {
+            HttpServer::_(new HttpServer());
+        }
+        HttpServer::RunQuickly($server_options);
+
+        sleep(1);// ugly
+        echo static::class . " HTTP SERVER PID = " . HttpServer::_()->getPid() . "\n";
+        $this->is_server_started = true;
+    }
+    protected function stopServer()
+    {
+        if (!$this->is_server_started) {
+            return;
+        }
+        HttpServer::_()->close();
+        $this->is_server_started = false;
+    }
+}
+trait HttpClientTrait
+{
+    protected $cookies = [];
+    protected $post = [];
+
+    protected function cleanClientStatus()
+    {
+        $this->cookies = [];
+    }
+
+    protected $current_url_prefix = '';
+
+    protected $pre_curl;
+    protected $post_curl;
+    protected $pre_webcall;
+    protected $post_webcall;
+
+    public function prepareCurl($ch)
+    {
+        $this->headers[] = 'X-MyCoverage-Name: ' . $this->watchingGetName();
+        if ($this->pre_webcall) {
+            $this->headers[] = 'X-MyCoverage-BeforeRun: ' . $this->pre_webcall;
+            $this->pre_webcall = null;
+        }
+        if ($this->post_webcall) {
+            $this->headers[] = 'X-MyCoverage-AfterRun: ' . $this->post_webcall;
+            $this->post_webcall = null;
+        }
+        $pre_curl = $this->pre_curl;
+        $this->pre_curl = null;
+
+        //////////////////////////
+        if (!$pre_curl || $pre_curl === '_') {
+            return $ch;
+        }
+
+        if ($pre_curl === 'AJAX') {
+            $this->headers[] = 'X-Requested-With: XMLHttpRequest';
+            return $ch;
+        }
+        if ($pre_curl === 'OPTIONS') {
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'OPTIONS');
+            return $ch;
+        }
+        $this->callHandler($pre_curl, [$ch, 'pre']);
+        return $ch;
+    }
+
+    public function postpareCurl($ch)
+    {
+        $post_curl = $this->post_curl;
+        $this->post_curl = null;
+
+        $this->callHandler($post_curl, [$ch, 'post']);
+    }
+
+    protected $headers = [];
+
+    protected function curl_file_get_contents($url, $post = [], $is_ajax = false, $is_options = false, $method = '')
+    {
+        $ch = curl_init();
+
+        if (is_array($url)) {
+            list($base_url, $real_host) = $url;
+            $url = $base_url;
+            $host = parse_url($url, PHP_URL_HOST);
+            $port = parse_url($url, PHP_URL_PORT);
+            $c = $host . ':' . $port . ':' . $real_host;
+            curl_setopt($ch, CURLOPT_CONNECT_TO, [$c]);
+        }
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        //curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1); 
+
+        // 始终抓取响应头，以收集/更新所有 Set-Cookie
+        curl_setopt($ch, CURLOPT_HEADER, 1);
+
+        if (!empty($post)) {
+            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
+        }
+        /////////
+        // 连续传递所有已收集的 cookie（不再只传 PHPSESSID）
+        if (!empty($this->cookies)) {
+            $cookie_str = [];
+            foreach ($this->cookies as $name => $value) {
+                $cookie_str[] = $name . '=' . $value;
+            }
+            curl_setopt($ch, CURLOPT_COOKIE, implode('; ', $cookie_str));
+        }
+
+        $this->prepareCurl($ch);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
+        $data = curl_exec($ch);
+        $this->headers = [];
+        // 收集响应中的所有 Set-Cookie，同名覆盖（空值/deleted 移除）
+        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $headers = substr($data, 0, $header_size);
+        $data = substr($data, $header_size);
+        if (preg_match_all('/Set-Cookie:\s*([^=;\s]+)=([^;]*)/i', $headers, $ms)) {
+            foreach ($ms[1] as $i => $name) {
+                $value = trim($ms[2][$i]);
+                if ($value === '' || strcasecmp($value, 'deleted') === 0) {
+                    unset($this->cookies[$name]);
+                } else {
+                    $this->cookies[$name] = $value;
+                }
+            }
+        }
+        $this->postpareCurl($ch);
+        echo $url;
+        echo ' ';
+        echo http_build_query($post);
+        echo "\n";
+        //echo $data;
+        curl_close($ch);
+        $data = ($data !== false) ? $data : '';
+        return $data;
+    }
 }
