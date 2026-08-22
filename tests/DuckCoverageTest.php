@@ -13,8 +13,9 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $__SERVER = $_SERVER;
         $old = LibCoverage::_();
         $path = LibCoverage::_()->getClassTestPath(DuckCoverage::class);
-
         LibCoverage::Begin(DuckCoverage::class);
+        @mkdir($path);
+        $this->makeData($path);
         DuckCoverage::_(DuckCoverageEx::_());
 
         include $path.'src/MyDuckCoverageApp.php';
@@ -35,17 +36,14 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $this->cmd("duckcover --replay group1");
         $this->cmd("duckcover --report group1 group2");
         $this->cmd("duckcover --report group1");
+        $this->cmd("duckcover --go");
 
-
-        
-
-        //@mkdir($path);
         //$this->makeData($path);
         //$this->testDefaultOptions();
 
         $__SERVER = $_SERVER;
         LibCoverage::_($old);
-
+        //LibCoverage::_()->clean
         LibCoverage::End();
     }
     protected function cmd(string $str)
@@ -54,6 +52,48 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         array_unshift($my_argv, '-');
         $_SERVER['argv']=$my_argv;
         DuckCoverageApp::_()->run();
+    }
+    protected function makeData($path)
+    {
+        @mkdir($path.'src/');
+        $str = <<<'EOT'
+use DuckPhp\DuckPhp;
+use DuckPhp\Core\Console;
+
+class MyDuckCoverageApp extends tests\DuckCoverage\DuckCoverageApp
+{
+    public $options = [
+        'is_debug' => true,
+        'name'=> 'MyDuckCoverageApp',
+        'cli_command_with_common' => true,
+        'duckcoverage_enable'=>true,
+
+    ];
+    protected function onPrepare(): void
+    {
+        parent::onPrepare();
+        $this->options['cmd'] = array_merge([static::class => true], $this->options['cmd']);
+    }
+    public function command_cmdback()
+    {
+        $data = Console::_()->getCliParameters();
+        var_dump($data);
+    }
+    public static function Callback()
+    {
+        var_dump(DATE(DATE_ATOM));
+        //$path = LibCoverage::_()->getClassTestPath(DuckCoverage::class);
+        //file_put_contents($path.'x.log',DATE(DATE_ATOM));
+        return;
+    }
+
+}
+
+EOT;
+'EOT';
+        file_put_contents($path.'src/MyDuckCoverageApp.php',"<"."?php declare(strict_types=1);
+\n".$str);
+
     }
 }
 class DuckCoverageEx extends DuckCoverage
@@ -86,20 +126,26 @@ class DuckCoverageTestList
 {
     public static function Callback()
     {
+        $path = LibCoverage::_()->getClassTestPath(DuckCoverage::class);
+        file_put_contents($path.'x.log',DATE(DATE_ATOM));
         return;
     }
     public static function GetTestList()
     {
-// #SETWEB _ _ _ _
-// #CMD
 
         $str=<<<EOT
 #PHASE 
+#CALL MyDuckCoverageApp::Callback
 #CMD cmdback
 #SETWEB _ _ _ _
-#CALL DuckCoverageTestList::Callback
+#WEB /
 
 EOT;
+        $str=<<<EOT
+#CMD cmdback
+
+EOT;
+
         return $str;
     }
 }

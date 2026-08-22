@@ -134,7 +134,7 @@ class DuckCoverage extends ComponentBase
             $this->callHandler($before_run);
         }
 
-        $this->doBegin();
+        $this->doBegin($name, $this->current_group, $this->current_path_src, $this->current_path_dump);
     }
 
     public function _OnAfterRun()
@@ -200,20 +200,21 @@ class DuckCoverage extends ComponentBase
         $this->current_group = $this->watchingGetName();
         foreach ($test_list as $line) {
             $str = (new \DateTime())->format('Y-m-d H:i:s.v');
-            $name = "[$str]".$line;
+            $name = "[{$this->current_group} $str]".$line;
             $this->doBegin(
                 $name,
                 $this->current_group,
                 $this->current_path_src,
                 $this->current_path_dump
             );
-            $this->readCommand($line);
-            $this->doEnd();
+            $this->readCommand($line);   // @codeCoverageIgnore
+            $this->doEnd();              // @codeCoverageIgnore
         }
         $this->stopServer();
     }
     protected function readCommand($request)
     {
+        file_put_contents($this->current_path_dump.'readCommand.log',DATE(DATE_ATOM).' '.$request."\n",FILE_APPEND);
         $request = ltrim($request);
         if (!$request) {
             return;
@@ -227,21 +228,18 @@ class DuckCoverage extends ComponentBase
         ];
         $flag = preg_match('/^(\S+)\s+(.*)/',$request,$m);
         if($flag){
-            $call = ucfirst(substr(strtolower($m[0]),1));
+            $call = ucfirst(substr(strtolower($m[1]),1));
             $method = "explain".$call;
-            if(method_exists($this, $method)){
-                ($this->$method)($request);
-            }
+            call_user_func([$this, $method],$request);
         }
     }
-    protected function explainPhase($request)
+    public function explainPhase($request)
     {
         if (substr($request, 0, strlen('#PHASE ')) === '#PHASE ') {
             $phase = trim(substr($request, strlen('#PHASE ')));
             App::Phase($phase);
             return;
         }
-
     }
     protected function explainWeb($request)
     {
@@ -274,21 +272,7 @@ class DuckCoverage extends ComponentBase
     protected function explainCall($request)
     {
         @list($command, $func) = explode(' ', $request);
-        if ($command !== '#CALL') {
-            return;
-        }
-
-        $this->current_name = $command;
-
-        ////[[[[
-        //// save list
-        $path_dump = $this->getSubPath('duckcoverage_path_dump');
-        @mkdir($path_dump);
-        file_put_contents($path_dump . $this->options['duckcoverage_group'] . '.list', $request . "\n", FILE_APPEND);
-        ////]]]]
-
         $this->callHandler($func);
-
     }
     protected function explainSetweb($request)
     {
@@ -305,9 +289,10 @@ class DuckCoverage extends ComponentBase
     }
     protected function explainCmd($request)
     {
-        // 这里应该用的是 DuckPhp 的 Console Call
-        // 把命令行转成 argv;
-        Console::_()->run();
+        $__SERVER = $_SERVER;
+        $_SERVER['argv'] =['-','cmdback'];
+        App::_()->execute();
+        $_SERVER = $__SERVER;
     }
     ////////////////////////////////////////////////////////////////////////////
     /**
@@ -371,7 +356,7 @@ EOT;
                 $watch_name = 'default_'. DATE('Y_m_d_H_i_s');
             }
             $this->watchingBegin($watch_name);
-            $this->options['duckcoverage_group'] =  $watch_name;
+            
             echo "watching {$watch_name}\n";
         }
         if ($p['stop'] ?? false) {
@@ -396,8 +381,8 @@ EOT;
             if ($watch_name === true) {
                 $watch_name = 'default_'. DATE('Y_m_d_H_i_s');
             }
+            $this->options['duckcoverage_report_direct'] = true;
             $this->watchingBegin($watch_name);
-            $this->options['duckcoverage_group'] =  $watch_name;
             echo "watching {$watch_name}\n";
             $this->replay();
             $this->watchingEnd();
@@ -425,17 +410,22 @@ EOT;
     ////[[[[
     protected function watchingBegin($name)
     {
+        $this->current_group = $name;
         file_put_contents($this->current_path_dump. $name.'.watch.lock',DATE(DATE_ATOM));
         file_put_contents($this->current_path_dump.'DuckCoverage.watching.txt',$name);
     }
     protected function watchingEnd()
     {
+        $this->current_group = null;
         $name = $this->watchingGetName();
-        @unlink($this->options['duckcoverage_path']. basename($name).'.watch.lock',);
         @unlink($this->options['duckcoverage_path'].'DuckCoverage.watching.txt');
+        @unlink($this->options['duckcoverage_path']. basename($name).'.watch.lock');
     }
     protected function watchingGetName()
     {
+        if ($this->current_group) {
+            return $this->current_group;
+        }
         $group = @file_get_contents($this->options['duckcoverage_path'].'DuckCoverage.watching.txt');
         return $group;    
     }
