@@ -11,12 +11,14 @@ use DuckPhp\Core\ComponentBase;
 use DuckPhp\Core\Console;
 use DuckPhp\Core\ExitException;
 use DuckPhp\Core\SystemWrapper;
+use DuckPhp\Core\SuperGlobal;
 use DuckPhp\Foundation\Helper;
 use DuckPhp\HttpServer\HttpServer;
 use LibCoverage\GroupCoverageRunner;
 
 class DuckCoverage extends ComponentBase
 {
+    use CommandTrait;
     use HttpServerTrait;
     use HttpClientTrait;
 
@@ -29,12 +31,11 @@ class DuckCoverage extends ComponentBase
 
         'duckcoverage_path' => '',
         'duckcoverage_path_src' => 'src/', // 需要
-        'duckcoverage_path_dump' => 'test_coveragedumps',
         'duckcoverage_report_direct' => false,
 
         'duckcoverage_web_base_url' => '',
         // 外部服务器(如 nginx)基础 URL,如 http://admin.duckphp-local.com/ ;空则退回内部测试服务器
-        'duckcoverage_server_port' => 8080,
+        'duckcoverage_server_port' => 8017,
         'duckcoverage_server_host' => '',
         'duckcoverage_path_server' => '',
         'duckcoverage_path_document' => 'public',
@@ -70,31 +71,24 @@ class DuckCoverage extends ComponentBase
     }
     public function init(array $options, ?object $context = null)
     {
+        parent::init($options, $context);
         if (!$options['duckcoverage_enable']) {
             return $this;
         }
         if (!App::_()->isRoot()) {
             return $this;
         }
+        $path_project = App::_()->getProjectPath();
+        $path_runtime = App::_()->getRuntimePath();
 
-        // 必须先于 parent::init() 赋值:runner 在 CoverageBase::init 时对路径做快照,
-        // 否则 getSubPath 会用默认空路径快照,导致 dump 与报告目录错位
-        $this->options['duckcoverage_path'] = Helper::PathOfRuntime() .'DuckCoverage/';
+        $this->options['duckcoverage_path'] = $path_runtime .'DuckCoverage/';
+        $this->options['duckcoverage_path_server'] =  $this->options['duckcoverage_path_server'] ?
+             $this->options['duckcoverage_path_server'] : $path_project;
+
+        $this->current_path_src = $path_project .$this->options['duckcoverage_path_src'];
+        $this->current_path_dump = $this->options['duckcoverage_path'];
+
         @mkdir($this->options['duckcoverage_path']);
-
-        $this->current_path_dump = $this->options['duckcoverage_path'];
-        $this->current_path_src = Helper::PathOfProject() .$this->options['duckcoverage_path_src'];
-        @mkdir($this->current_path_dump);
-
-        parent::init($options, $context); //这行要去掉
-
-        $this->options['duckcoverage_path_server'] =  $this->options['duckcoverage_path_server'] ? $this->options['duckcoverage_path_server'] : Helper::PathOfProject();
-
-
-        $this->options['duckcoverage_path'] = Helper::PathOfRuntime() .'DuckCoverage/';
-        $this->current_path_dump = $this->options['duckcoverage_path'];
-
-        $this->current_path_src = Helper::PathOfProject() .$this->options['duckcoverage_path_src'];
 
         if ($this->options['duckcoverage_reg_console_command']) {
             App::_()->regConsoleCommand(static::class, 'command_');
@@ -104,15 +98,17 @@ class DuckCoverage extends ComponentBase
     }
     public function prepareForHttp()
     {
-        //TODO 安全问题
+        $client_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
+        $server_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
+        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
+        $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
 
-        $watching_name = $this->watchingGetName();
-        $server_name = Helper::SERVER('HTTP_X_MYCOVERAGE_NAME', '');
-        //$server_name = $_SERVER['HTTP_X_MYCOVERAGE_NAME']??'';
-        if (!($watching_name && $watching_name === $server_name)) {
+        if(!$client_ip || !$server_ip || ($client_ip != $server_ip) || !$name || !$group){
             return;
         }
-        
+        $this->current_name = $name;
+        $this->current_group = $group;
+
         ExitException::Init();
         $this->_OnBeforeRun();
         SystemWrapper::register_shutdown_function(function () {
@@ -121,10 +117,7 @@ class DuckCoverage extends ComponentBase
     }
     public function _OnBeforeRun()
     {
-        $this->current_group = $this->watchingGetName();
-        $this->current_name = $this->getTestName();
-
-        $before_run = Helper::SERVER('HTTP_X_MYCOVERAGE_BEFORERUN', '');
+        $before_run = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_BEFORERUN', '');
         if ($before_run) {
             $this->callHandler($before_run);
         }
@@ -134,26 +127,11 @@ class DuckCoverage extends ComponentBase
 
     public function _OnAfterRun()
     {
-        $after_run = Helper::SERVER('HTTP_X_MYCOVERAGE_AFTERRUN', '');
+        $after_run = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_AFTERRUN', '');
         if ($after_run) {
             $this->callHandler($after_run);
         }
         $this->doEnd();
-    }
-
-    protected function getTestName()
-    {
-        $time = date('ymdHis.', $_SERVER['REQUEST_TIME']) . sprintf('%03d', ($_SERVER['REQUEST_TIME_FLOAT'] - (int) $_SERVER['REQUEST_TIME_FLOAT']) * 1000);
-
-        $method = Helper::SERVER('REQUEST_METHOD', 'GET');
-
-        $session_id = Helper::COOKIE('PHPSESSID', '');
-        $uri = Helper::SERVER('REQUEST_URI', '');
-        $post = Helper::POST();
-        $post = http_build_query($post);
-        $ajax = Helper::IsAjax() ? 'AJAX' : '';
-        $ret = implode(";", [$time, $uri, $post, $session_id, $method, $ajax]);
-        return $ret;
     }
     //////////////////
     protected function replay()
@@ -167,8 +145,9 @@ class DuckCoverage extends ComponentBase
         foreach ($test_list as $line) {
             $str = (new \DateTime())->format('Y-m-d H:i:s.v');
             $name = "[{$this->current_group} $str]".$line;
+            $this->current_name = $name;
             $this->doBegin(
-                $name,
+                $this->current_name,
                 $this->current_group,
                 $this->current_path_src,
                 $this->current_path_dump
@@ -177,128 +156,6 @@ class DuckCoverage extends ComponentBase
             $this->doEnd();              // @codeCoverageIgnore
         }
         $this->stopServer();
-    }
-    protected function readCommand($request)
-    {
-        file_put_contents($this->current_path_dump.'readCommand.log',DATE(DATE_ATOM).' '.$request."\n",FILE_APPEND);
-        $request = ltrim($request);
-        $map =[
-            '#PHASE' => 'explainPhase',
-            '#CALL' => 'explainCall',
-            '#WEB' => 'explainWeb',
-            '#SETWEB' => 'explainSetWeb',
-            '#CMD' => 'explainCmd',
-        ];
-        $flag = preg_match('/^(\S+)\s+(.*)/',$request,$m);
-        if($flag){
-            $call = ucfirst(substr(strtolower($m[1]),1));
-            $method = "explain".$call;
-            call_user_func([$this, $method],$request);
-        }
-    }
-    public function explainPhase($request)
-    {
-        if (substr($request, 0, strlen('#PHASE ')) === '#PHASE ') {
-            $phase = trim(substr($request, strlen('#PHASE ')));
-            App::Phase($phase);
-            return;
-        }
-    }
-    protected function explainWeb($request)
-    {
-        @list($command, $uri, $poststr, $method) = explode(' ', $request);
-
-        $base_url = (string) ($this->options['duckcoverage_web_base_url'] ?? '');
-        if ($base_url === '') {
-            // 未配置外部服务器(如 nginx)时,退回内部 PHP 测试服务器
-            $this->startServer();
-            //$this->getServerBaseUrl();
-            $base_url = "http://127.0.0.1:{$this->options['duckcoverage_server_port']}" . $this->options['duckcoverage_homepage'];
-        }
-        $post = [];
-        if ($poststr) {
-            parse_str($poststr, $post);
-        }
-        $is_ajax = ($method === 'AJAX') ? true : false;
-        $is_options = ($method === 'OPTIONS') ? true : false;
-
-        $url = $base_url . $uri;
-        $data = $this->curl_file_get_contents($url, $post, $is_ajax, $is_options, $method);
-        if ($this->options['duckcoverage_echo_back'] ?? false) {
-            echo substr($data, 0, 200);
-        }
-    }
-    protected function explainCall($request)
-    {
-        @list($command, $func) = explode(' ', $request);
-        $this->callHandler($func);
-    }
-    protected function explainSetweb($request)
-    {
-        @list($command, $pre_curl, $pre_webcall, $post_webcall, $post_curl) = explode(' ', trim($request));
-        $this->pre_curl = ($pre_curl === '_') ? null : $pre_curl;
-        $this->pre_webcall = ($pre_webcall === '_') ? null : $pre_webcall;
-        $this->post_webcall = ($post_webcall === '_') ? null : $post_webcall;
-        $this->post_curl = ($post_curl === '_') ? null : $post_curl;
-        return;
-    }
-    protected function explainCmd($request)
-    {
-        $__SERVER = $_SERVER;
-        $_SERVER['argv'] =['-','cmdback'];
-        App::_()->execute();
-        $_SERVER = $__SERVER;
-    }
-    ////////////////////////////////////////////////////////////////////////////
-    protected function callHandler($handler, $ext_args = [])
-    {
-        if (!isset($handler)) {
-            return;
-        }
-        $handler = trim($handler);
-        //$handler = "DuckAdmin\\Test\\Tester@_justTest?parameter=d";
-        $flag = preg_match('/^(([a-zA-Z0-9_\x7f-\xff\\\\]+)(\:\:|\@|\->)([a-zA-Z0-9_\x7f-\xff]+)|([a-zA-Z0-9_\x7f-\xff]+))(\?(\S*))?$/', $handler, $m);
-        if (!$flag) {
-            return false;
-        }
-        @list($_0, $_1, $class, $type, $method, $function, $_6, $parameters) = $m;
-        return $this->callObject($class, $method, $type, $function, $parameters, $ext_args);
-    }
-    /**
-     */
-    public function callObject($class, $method, $type, $function, $poststr, $args = [])
-    {
-        $input = [];
-
-        if ($poststr) {
-            parse_str($poststr, $input);
-        }
-        if (!$function) {
-            if ($type === '@') {
-                $object = $class::_();
-            } else if ($type === '->') {
-                $object = new $class;
-            } else if ($type === '::') {
-                $object = $class;
-            }
-            $reflect = new \ReflectionMethod($object, $method);
-        } else {
-            $reflect = new \ReflectionFunction($function);
-        }
-
-        $params = $reflect->getParameters();
-        foreach ($params as $i => $param) {
-            $name = $param->getName();
-            if (isset($input[$name])) {
-                $args[$i] = $input[$name];
-            } elseif ($param->isDefaultValueAvailable() && !isset($args[$i])) {
-                $args[$i] = $param->getDefaultValue();
-            } elseif (!isset($args[$i])) {
-                throw new \ReflectionException("Command Need Parameter: {$name}\n", -2);
-            }
-        }
-        $ret = $reflect->invokeArgs(is_object($object) ? $object : null, $args);
-        return $ret;
     }
     /**
      * tests group. use --help for more.
@@ -418,6 +275,131 @@ EOT;
     }
     ////]]]]
 }
+trait CommandTrait
+{
+    protected function readCommand($request)
+    {
+        file_put_contents($this->current_path_dump.'readCommand.log',DATE(DATE_ATOM).' '.$request."\n",FILE_APPEND);
+        $request = ltrim($request);
+        $map =[
+            '#PHASE' => 'explainPhase',
+            '#CALL' => 'explainCall',
+            '#WEB' => 'explainWeb',
+            '#SETWEB' => 'explainSetWeb',
+            '#CMD' => 'explainCmd',
+        ];
+        $flag = preg_match('/^(\S+)\s+(.*)/',$request,$m);
+        if($flag){
+            $call = ucfirst(substr(strtolower($m[1]),1));
+            $method = "explain".$call;
+            call_user_func([$this, $method],$request);
+        }
+    }
+    public function explainPhase($request)
+    {
+        if (substr($request, 0, strlen('#PHASE ')) === '#PHASE ') {
+            $phase = trim(substr($request, strlen('#PHASE ')));
+            App::Phase($phase);
+            return;
+        }
+    }
+    protected function explainWeb($request)
+    {
+        @list($command, $uri, $poststr, $method) = explode(' ', $request);
+
+        $base_url = (string) ($this->options['duckcoverage_web_base_url'] ?? '');
+        if ($base_url === '') {
+            // 未配置外部服务器(如 nginx)时,退回内部 PHP 测试服务器
+            $this->startServer();
+            //$this->getServerBaseUrl();
+            $base_url = "http://127.0.0.1:{$this->options['duckcoverage_server_port']}" . $this->options['duckcoverage_homepage'];
+        }
+        $post = [];
+        if ($poststr) {
+            parse_str($poststr, $post);
+        }
+        $is_ajax = ($method === 'AJAX') ? true : false;
+        $is_options = ($method === 'OPTIONS') ? true : false;
+
+        $url = rtrim($base_url,'/') . $uri;
+        $data = $this->curl_file_get_contents($url, $post, $is_ajax, $is_options, $method);
+        if ($this->options['duckcoverage_echo_back'] ?? false) {
+            echo substr($data, 0, 200);
+        }
+    }
+    protected function explainCall($request)
+    {
+        @list($command, $func) = explode(' ', $request);
+        $this->callHandler($func);
+    }
+    protected function explainSetweb($request)
+    {
+        @list($command, $pre_curl, $pre_webcall, $post_webcall, $post_curl) = explode(' ', trim($request));
+        $this->pre_curl = ($pre_curl === '_') ? null : $pre_curl;
+        $this->pre_webcall = ($pre_webcall === '_') ? null : $pre_webcall;
+        $this->post_webcall = ($post_webcall === '_') ? null : $post_webcall;
+        $this->post_curl = ($post_curl === '_') ? null : $post_curl;
+        return;
+    }
+    protected function explainCmd($request)
+    {
+        $__SERVER = $_SERVER;
+        $_SERVER['argv'] =['-','cmdback'];
+        App::_()->execute();
+        $_SERVER = $__SERVER;
+    }
+    ////////////////////////////////////////////////////////////////////////////
+    protected function callHandler($handler, $ext_args = [])
+    {
+        if (!isset($handler)) {
+            return;
+        }
+        $handler = trim($handler);
+        //$handler = "DuckAdmin\\Test\\Tester@_justTest?parameter=d";
+        $flag = preg_match('/^(([a-zA-Z0-9_\x7f-\xff\\\\]+)(\:\:|\@|\->)([a-zA-Z0-9_\x7f-\xff]+)|([a-zA-Z0-9_\x7f-\xff]+))(\?(\S*))?$/', $handler, $m);
+        if (!$flag) {
+            return false;
+        }
+        @list($_0, $_1, $class, $type, $method, $function, $_6, $parameters) = $m;
+        return $this->callObject($class, $method, $type, $function, $parameters, $ext_args);
+    }
+    /**
+     */
+    public function callObject($class, $method, $type, $function, $poststr, $args = [])
+    {
+        $input = [];
+
+        if ($poststr) {
+            parse_str($poststr, $input);
+        }
+        if (!$function) {
+            if ($type === '@') {
+                $object = $class::_();
+            } else if ($type === '->') {
+                $object = new $class;
+            } else if ($type === '::') {
+                $object = $class;
+            }
+            $reflect = new \ReflectionMethod($object, $method);
+        } else {
+            $reflect = new \ReflectionFunction($function);
+        }
+
+        $params = $reflect->getParameters();
+        foreach ($params as $i => $param) {
+            $name = $param->getName();
+            if (isset($input[$name])) {
+                $args[$i] = $input[$name];
+            } elseif ($param->isDefaultValueAvailable() && !isset($args[$i])) {
+                $args[$i] = $param->getDefaultValue();
+            } elseif (!isset($args[$i])) {
+                throw new \ReflectionException("Command Need Parameter: {$name}\n", -2);
+            }
+        }
+        $ret = $reflect->invokeArgs(is_object($object) ? $object : null, $args);
+        return $ret;
+    }
+}
 trait HttpServerTrait
 {
     protected $is_server_started = false;
@@ -441,7 +423,7 @@ trait HttpServerTrait
         }
         HttpServer::RunQuickly($server_options);
 
-        sleep(1);// ugly
+        //sleep(1);// ugly
         echo static::class . " HTTP SERVER PID = " . HttpServer::_()->getPid() . "\n";
         $this->is_server_started = true;
     }
@@ -464,8 +446,6 @@ trait HttpClientTrait
         $this->cookies = [];
     }
 
-    protected $current_url_prefix = '';
-
     protected $pre_curl;
     protected $post_curl;
     protected $pre_webcall;
@@ -473,7 +453,8 @@ trait HttpClientTrait
 
     public function prepareCurl($ch)
     {
-        $this->headers[] = 'X-MyCoverage-Name: ' . $this->watchingGetName();
+        $this->headers[] = 'X-MyCoverage-Name: ' . $this->current_name;
+        $this->headers[] = 'X-MyCoverage-Group: ' . $this->current_group;
         if ($this->pre_webcall) {
             $this->headers[] = 'X-MyCoverage-BeforeRun: ' . $this->pre_webcall;
             $this->pre_webcall = null;
@@ -515,7 +496,6 @@ trait HttpClientTrait
     protected function curl_file_get_contents($url, $post = [], $is_ajax = false, $is_options = false, $method = '')
     {
         $ch = curl_init();
-
         if (is_array($url)) {
             list($base_url, $real_host) = $url;
             $url = $base_url;
@@ -551,8 +531,8 @@ trait HttpClientTrait
         $this->headers = [];
         // 收集响应中的所有 Set-Cookie，同名覆盖（空值/deleted 移除）
         $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        $headers = substr($data, 0, $header_size);
-        $data = substr($data, $header_size);
+        $headers = substr((string)$data, 0, $header_size);
+        $data = substr((string)$data, $header_size);
         if (preg_match_all('/Set-Cookie:\s*([^=;\s]+)=([^;]*)/i', $headers, $ms)) {
             foreach ($ms[1] as $i => $name) {
                 $value = trim($ms[2][$i]);
@@ -568,7 +548,7 @@ trait HttpClientTrait
         echo ' ';
         echo http_build_query($post);
         echo "\n";
-        //echo $data;
+        echo $data;
         curl_close($ch);
         $data = ($data !== false) ? $data : '';
         return $data;

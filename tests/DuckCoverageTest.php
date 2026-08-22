@@ -55,8 +55,10 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
     }
     protected function makeData($path)
     {
+
         @mkdir($path.'runtime/', 0777, true); 
         @mkdir($path.'src/');
+        @mkdir($path.'public/');
         $str = <<<'EOT'
 use DuckPhp\DuckPhp;
 use DuckPhp\Core\Console;
@@ -92,9 +94,14 @@ class MyDuckCoverageApp extends tests\DuckCoverage\DuckCoverageApp
 
 EOT;
 'EOT';
-        file_put_contents($path.'src/MyDuckCoverageApp.php',"<"."?php declare(strict_types=1);
-\n".$str);
+        file_put_contents($path.'src/MyDuckCoverageApp.php',"<"."?php declare(strict_types=1);\n".$str);
+        $str = <<<'EOT'
+setcookie('CK'.DATE('His'),DATE('Y-m-d H:i:s'));
+var_dump(DATE(DATE_ATOM));
+EOT;
+'EOT';
 
+        file_put_contents($path.'public/index.php',"<"."?php declare(strict_types=1);\n".$str);
     }
 }
 class DuckCoverageEx extends DuckCoverage
@@ -103,12 +110,57 @@ class DuckCoverageEx extends DuckCoverage
     {
         return parent::readCommand($request);
     }
+    public function testRunServer()
+    {
+        $this->startServer();
+        $this->stopServer();
+    }
+
 }
 class DuckCoverageApp extends DuckPhp
 {
+    public static function pre_curl($ch,$name)
+    {
+        var_dump($name);
+    }
+    public static function post_curl($ch,$name)
+    {
+        var_dump($name);
+    }
+    public static function pre_web()
+    {
+        var_dump(DATE(DATE_ATOM));
+    }
+    public static function post_web()
+    {
+        var_dump(DATE(DATE_ATOM));
+    }
+
     public $options =[
         'duckcoverage_enable'=>true,
+        'duckcoverage_echo_back' => true,
+
     ];
+    public function __construct()
+    {
+        parent::__construct();
+        $path = explode('\\', static::class);
+        $short_class = array_pop($path);
+        $namespace = implode("\\", $path);
+        $ext_options = [
+            'namespace_controller' => "\\".$namespace,
+            'name' => 'DuckCoverageApp',
+            'controller_welcome_class' => $short_class ,
+            'controller_class_postfix' => '',
+            'controller_method_prefix' => 'action_',
+        ];
+        $this->options = array_merge($this->options, $ext_options);
+    }
+    public function action_index()
+    {
+        setcookie('CK'.DATE('His'),DATE('Y-m-d H:i:s'));
+        var_dump(DATE(DATE_ATOM));
+    }
     protected function onPrepare(): void
     {
         DuckCoverage::_()->beforeInit(); //mover  json data ;
@@ -130,19 +182,23 @@ class DuckCoverageApp extends DuckPhp
 #PHASE 
 #CALL MyDuckCoverageApp::Callback
 #CMD cmdback
-#SETWEB _ _ _ _
+#SETWEB {static}::pre_curl {static}::pre_web {static}::prost_web {static}::post_curl
+#WEB /
+#WEB / a=b POST
+#SETWEB AJAX _ _ _
+#WEB /
+#SETWEB OPTIONS _ _ _
 #WEB /
 
-EOT;
-        $str1=<<<EOT
-#CALL MyDuckCoverageApp::Callback
-#WEB /
+#CMD cmdback
 
 EOT;
+        $str = str_replace('{static}',static::class,$str);
         $cmds = explode("\n",$str);
         foreach($cmds as $cmd){
             DuckCoverageEx::_()->readCommand($cmd);
         }
+        DuckCoverageEx::_()->testRunServer();
     }
 }
 class DuckCoverageTestList
