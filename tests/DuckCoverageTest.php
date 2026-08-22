@@ -14,6 +14,7 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $old = LibCoverage::_();
         $path = LibCoverage::_()->getClassTestPath(DuckCoverage::class);
         LibCoverage::Begin(DuckCoverage::class);
+        LibCoverage::_()->cleanDirectory($path);
         @mkdir($path);
         $this->makeData($path);
         DuckCoverage::_(DuckCoverageEx::_());
@@ -42,7 +43,7 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
 
         $__SERVER = $_SERVER;
         LibCoverage::_($old);
-        //LibCoverage::_()->cleanDirectory($path);
+        LibCoverage::_()->cleanDirectory($path);
         LibCoverage::End();
     }
     protected function cmd(string $str)
@@ -54,6 +55,7 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
     }
     protected function makeData($path)
     {
+        @mkdir($path.'runtime/', 0777, true); 
         @mkdir($path.'src/');
         $str = <<<'EOT'
 use DuckPhp\DuckPhp;
