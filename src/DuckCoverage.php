@@ -352,10 +352,12 @@ trait CommandTrait
         $this->post_curl = ($post_curl === '_') ? null : $post_curl;
         return;
     }
-    protected function explainCmd(string $param)
+    protected function explainRun(string $param)
     {
         $argv = $this->shell_parse($param);
+        array_unshift($argv,'-');
         $__SERVER = $_SERVER;
+    
         $_SERVER['argv'] = $argv;
         App::_()->execute();
         $_SERVER = $__SERVER;
@@ -383,15 +385,19 @@ trait CommandTrait
         if ($poststr) {
             parse_str($poststr, $input);
         }
+        $object = null;
         if (!$function) {
             if ($type === '@') {
                 $object = $class::_();
+                $reflect = new \ReflectionMethod($object, $method);
             } else if ($type === '->') {
                 $object = new $class;
+                $reflect = new \ReflectionMethod($object, $method);
             } else if ($type === '::') {
-                $object = $class;
+                $object = null;//$class;
+                $reflect = new \ReflectionMethod($class, $method);
             }
-            $reflect = new \ReflectionMethod($object, $method);
+            
         } else {
             $reflect = new \ReflectionFunction($function);
         }
@@ -404,10 +410,14 @@ trait CommandTrait
             } elseif ($param->isDefaultValueAvailable() && !isset($args[$i])) {
                 $args[$i] = $param->getDefaultValue();
             } elseif (!isset($args[$i])) {
-                throw new \ReflectionException("Command Need Parameter: {$name}\n", -2);
+                //throw new \ReflectionException("Command Need Parameter: {$name}\n", -2);
             }
         }
-        $ret = $reflect->invokeArgs(is_object($object) ? $object : null, $args);
+        if ($reflect instanceof \ReflectionMethod) {
+            $ret = $reflect->invokeArgs($object, $args);
+        } else {
+            $ret = $reflect->invokeArgs($args);
+        }
         return $ret;
     }
     function shell_parse(string $str): array

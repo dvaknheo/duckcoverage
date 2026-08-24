@@ -130,8 +130,9 @@ class DuckCoverageEx extends DuckCoverage
 }
 class DuckCoverageApp extends DuckPhp
 {
-    public function command_cmdback()
+    public function command_mycmd()
     {
+        var_dump("CALLED");
         $data = Console::_()->getCliParameters();
         var_dump($data);
     }
@@ -167,6 +168,7 @@ class DuckCoverageApp extends DuckPhp
     }
 
     public $options =[
+        'is_debug' => true,
         'duckcoverage_enable'=>true,
         'duckcoverage_debug_curl_echo_back' => true,
     ];
@@ -206,6 +208,10 @@ class DuckCoverageApp extends DuckPhp
         DuckCoverage::AfterRun();
         return $flag;
     }
+    public function func($name, $default='_')
+    {
+
+    }
     public function testMore()
     {
         $this->is_root = false;
@@ -218,10 +224,9 @@ class DuckCoverageApp extends DuckPhp
         $this->options['duckcoverage_enable']=true;
 
         $str=<<<EOT
-BAD
-PHASE
+BAD 
+PHASE 
 CALL {static}::Callback
-CMD cmdback
 SETWEB {static}::pre_curl {static}::pre_web {static}::prost_web {static}::post_curl
 WEB /
 WEB / a=b POST
@@ -231,6 +236,20 @@ CALL {static}::cloze_curl
 SETWEB OPTIONS _ _ _
 WEB /
 
+RUN mycmd {ARG}
+RUN mycmd {ARG}
+RUN mycmd {ARG}
+RUN mycmd {ARG}
+RUN mycmd {ARG}
+RUN mycmd {ARG}
+RUN mycmd {ARG}
+
+CALL @bad
+CALL is_string value=ok
+CALL {static}->func name=n1
+CALL {static}@func name=n2
+CALL {static}@func
+
 EOT;
 
 $testInputs = <<<'TESTCASES'
@@ -239,10 +258,14 @@ a b
 'a b'
 "a b"
 a\ b
-"a\"b"
+"a\"b" "c\d"
 \xF0\x9F\x98\x80
 TESTCASES;
-
+        $t = explode("\n",$testInputs);
+        foreach($t as $v){
+            $str = $this->str_replace_first("{ARG}",$v, $str);
+        }
+        
         $str = str_replace('{static}',static::class,$str);
         $str = str_replace('{cliprefix}',$this->getThisCommandPrefix(),$str);
         $cmds = explode("\n",$str);
@@ -258,6 +281,12 @@ TESTCASES;
         DuckCoverageEx::_()->options['duckcoverage_enable'] =false;
         DuckCoverageEx::_()->_OnBeforeRun();
         DuckCoverageEx::_()->options['duckcoverage_enable'] = true;
+    }
+    private function str_replace_first(string $search, string $replace, string $subject): string
+    {
+        $pos = strpos($subject, $search);
+        if ($pos === false) return $subject;
+        return substr_replace($subject, $replace, $pos, strlen($search));
     }
     public static function cloze_curl()
     {
