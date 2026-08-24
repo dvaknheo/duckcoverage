@@ -5,6 +5,7 @@ use DuckPhp\DuckPhp;
 use DuckCoverage\DuckCoverage;
 use DuckPhp\Core\Console;
 use LibCoverage\LibCoverage;
+use Override;
 
 class DuckCoverageTest extends \PHPUnit\Framework\TestCase
 {
@@ -191,6 +192,14 @@ class DuckCoverageApp extends DuckPhp
         DuckCoverage::_()->beforeInit(); //mover  json data ;
         parent::onPrepare();
         // something from setting;
+    }
+    #[Override]
+    public function serve(): bool
+    {
+        DuckCoverage::_()->_OnBeforeRun();
+        $flag = parent::serve();
+        DuckCoverage::_()->_OnAfterRun();
+        return $flag;
     }
     public function testMore()
     {

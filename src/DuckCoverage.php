@@ -10,6 +10,7 @@ use DuckPhp\Core\App;
 use DuckPhp\Core\ComponentBase;
 use DuckPhp\Core\Console;
 use DuckPhp\Core\ExitException;
+use DuckPhp\Core\PhaseContainer;
 use DuckPhp\Core\SystemWrapper;
 use DuckPhp\Core\SuperGlobal;
 use DuckPhp\Foundation\Helper;
@@ -27,6 +28,7 @@ class DuckCoverage extends ComponentBase
         'duckcoverage_enable' => true,
         'duckcoverage_data_file_json_file'=> 'DuckPhpData-duckcoverage.config.json',
         'duckcoverage_reg_console_command' => true,
+        'duckcoverage_reg_web_request' => false,
         'duckcoverage_callback' => null,
 
         'duckcoverage_path' => '',
@@ -41,10 +43,7 @@ class DuckCoverage extends ComponentBase
         'duckcoverage_path_document' => 'public',
         'duckcoverage_homepage' => '/',
         'duckcoverage_new_server' => true,
-
-        'duckcoverage_echo_back' => false,
-        'duckcoverage_save_web_request_list' => true,
-        //'duckcoverage_save_local_call_list' => false,
+        'duckcoverage_debug_curl_echo_back' => false,
 
     ];
 
@@ -68,6 +67,7 @@ class DuckCoverage extends ComponentBase
             App::_()->options['data_file_enable'] = true;
         }
         App::_()->options['ext'][static::class] = true;
+        PhaseContainer::_()->addPublicClasses([static::class => true]);
     }
     public function init(array $options, ?object $context = null)
     {
@@ -83,9 +83,12 @@ class DuckCoverage extends ComponentBase
 
         $this->options['duckcoverage_path'] = $path_runtime .'DuckCoverage/';
         $this->options['duckcoverage_path_server'] =  $this->options['duckcoverage_path_server'] ?
-             $this->options['duckcoverage_path_server'] : $path_project;
+        $this->options['duckcoverage_path_server'] : $path_project;
 
-        $this->current_path_src = $path_project .$this->options['duckcoverage_path_src'];
+        $is_abs = preg_match('/^(?:[A-Za-z]:[\/\\\\]|[\/\\\\]{2,}|[\/\\\\])/',$this->options['duckcoverage_path_src'] ?? '') > 0;
+        $this->current_path_src = $is_abs ? $this->options['duckcoverage_path_src'] : $path_project;
+        $this->current_path_src.='/User/Controller';
+        
         $this->current_path_dump = $this->options['duckcoverage_path'];
 
         @mkdir($this->options['duckcoverage_path']);
@@ -93,25 +96,13 @@ class DuckCoverage extends ComponentBase
         if ($this->options['duckcoverage_reg_console_command']) {
             App::_()->regConsoleCommand(static::class, 'command_');
         }
-        $this->prepareForHttp();
+        if ($this->options['duckcoverage_reg_web_request']) {
+            //$this->prepareForHttp();
+        }
         return $this;
     }
     public function prepareForHttp()
     {
-        $client_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
-        $server_ip = SuperGlobal::_()->_SERVER('SERVER_ADDR', '');
-        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
-        $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
-        if($client_ip){
-            var_dump("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
-        }
-        if(!$client_ip || !$server_ip || ($client_ip != $server_ip)  || !$name || !$group){
-            return;
-        }
-        $this->current_name = $name;
-        $this->current_group = $group;
-
-        ExitException::Init();
         $this->_OnBeforeRun();
         SystemWrapper::register_shutdown_function(function () {
             $this->_OnAfterRun();
@@ -119,21 +110,62 @@ class DuckCoverage extends ComponentBase
     }
     public function _OnBeforeRun()
     {
+        // $this->current_name = "bbb";
+        // $this->current_group = "t4";
+        // $this->doBegin($this->current_name, $this->current_group, $this->current_path_src, $this->current_path_dump);
+        // return;
+
+        if (!$this->options['duckcoverage_enable']) {
+            return $this;
+        }
+        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
+        $client_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
+        $server_ip = SuperGlobal::_()->_SERVER('SERVER_ADDR', '');
+        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
+        $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
+        if (($server_ip!=='127.0.0.1') || ($client_ip != $server_ip)  || !$name || !$group){
+            return;
+        }
+        $this->current_name = $name;
+        $this->current_group = $group;
+
+        ExitException::Init();
         $before_run = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_BEFORERUN', '');
         if ($before_run) {
             $this->callHandler($before_run);
         }
-
         $this->doBegin($this->current_name, $this->current_group, $this->current_path_src, $this->current_path_dump);
     }
 
     public function _OnAfterRun()
     {
+        // $this->current_name = "bbb";
+        // $this->current_group = "t4";
+        // $this->doEnd();
+        // return;
+
+        if (!$this->options['duckcoverage_enable']) {
+            return $this;
+        }
+        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
+        $client_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
+        $server_ip = SuperGlobal::_()->_SERVER('SERVER_ADDR', '');
+        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
+        $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
+        if (($server_ip!=='127.0.0.1') || ($client_ip != $server_ip)  || !$name || !$group){
+            return;
+        }
+        $this->current_name = $name;
+        $this->current_group = $group;
+        
         $after_run = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_AFTERRUN', '');
         if ($after_run) {
             $this->callHandler($after_run);
         }
         $this->doEnd();
+//file_put_contents(__DIR__."/z.log","server:".$this->current_group."\n",FILE_APPEND);        
+//file_put_contents(__DIR__."/z.log","server:".$this->current_name."\n",FILE_APPEND);
+
     }
     //////////////////
     protected function replay()
@@ -145,7 +177,7 @@ class DuckCoverage extends ComponentBase
 
         $this->current_group = $this->watchingGetName();
         foreach ($test_list as $line) {
-            $str = (new \DateTime())->format('Y-m-d H:i:s.v');
+            $str = (new \DateTime())->format('Y-m-d_H_i_s.v');
             $name = "[{$this->current_group} $str]".$line;
             $this->current_name = $name;
             $this->doBegin(
@@ -214,6 +246,7 @@ EOT;
             echo "watching {$watch_name}\n";
             $this->replay();
             $this->watchingEnd();
+            echo "watched {$watch_name}\n";
             $this->doReport([$watch_name]);
         }
     }
@@ -281,7 +314,6 @@ trait CommandTrait
 {
     protected function readCommand($request)
     {
-        file_put_contents($this->current_path_dump.'readCommand.log',DATE(DATE_ATOM).' '.$request."\n",FILE_APPEND);
         $request = ltrim($request);
         $map =[
             '#PHASE' => 'explainPhase',
@@ -291,10 +323,15 @@ trait CommandTrait
             '#CMD' => 'explainCmd',
         ];
         $flag = preg_match('/^(\S+)\s+(.*)/',$request,$m);
-        if($flag){
+        if ($flag) {
             $call = ucfirst(substr(strtolower($m[1]),1));
             $method = "explain".$call;
-            call_user_func([$this, $method],$request);
+            if (is_callable([$this, $method])) {
+                call_user_func([$this, $method],$request);
+            }else{
+                //echo "Bad Request: $request\n";
+            }
+            //echo $request;
         }
     }
     public function explainPhase($request)
@@ -325,7 +362,7 @@ trait CommandTrait
 
         $url = rtrim($base_url,'/') . $uri;
         $data = $this->curl_file_get_contents($url, $post, $is_ajax, $is_options, $method);
-        if ($this->options['duckcoverage_echo_back'] ?? false) {
+        if ($this->options['duckcoverage_debug_curl_echo_back'] ?? false) {
             echo substr($data, 0, 200);
         }
     }
@@ -550,7 +587,7 @@ trait HttpClientTrait
         echo ' ';
         echo http_build_query($post);
         echo "\n";
-        echo $data;
+        //echo $data;
         curl_close($ch);
         $data = ($data !== false) ? $data : '';
         return $data;
