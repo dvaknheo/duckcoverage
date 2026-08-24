@@ -87,7 +87,6 @@ class DuckCoverage extends ComponentBase
 
         $is_abs = preg_match('/^(?:[A-Za-z]:[\/\\\\]|[\/\\\\]{2,}|[\/\\\\])/',$this->options['duckcoverage_path_src'] ?? '') > 0;
         $this->current_path_src = $is_abs ? $this->options['duckcoverage_path_src'] : $path_project;
-        $this->current_path_src.='/User/Controller';
         
         $this->current_path_dump = $this->options['duckcoverage_path'];
 
@@ -97,7 +96,7 @@ class DuckCoverage extends ComponentBase
             App::_()->regConsoleCommand(static::class, 'command_');
         }
         if ($this->options['duckcoverage_reg_web_request']) {
-            //$this->prepareForHttp();
+            $this->prepareForHttp();
         }
         return $this;
     }
@@ -108,64 +107,47 @@ class DuckCoverage extends ComponentBase
             $this->_OnAfterRun();
         });
     }
+    protected function checkHttp()
+    {
+        if (!$this->options['duckcoverage_enable']) {
+            return false;
+        }
+        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
+        $client_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
+        $server_ip = SuperGlobal::_()->_SERVER('SERVER_ADDR', '');
+        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
+        $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
+        if (($server_ip!=='127.0.0.1') || ($client_ip != $server_ip)  || !$name || !$group){
+            return;
+        }
+        $this->current_name = $name;
+        $this->current_group = $group;
+        return true;
+    }
     public function _OnBeforeRun()
     {
-        // $this->current_name = "bbb";
-        // $this->current_group = "t4";
-        // $this->doBegin($this->current_name, $this->current_group, $this->current_path_src, $this->current_path_dump);
-        // return;
-
-        if (!$this->options['duckcoverage_enable']) {
-            return $this;
-        }
-        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
-        $client_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
-        $server_ip = SuperGlobal::_()->_SERVER('SERVER_ADDR', '');
-        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
-        $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
-        if (($server_ip!=='127.0.0.1') || ($client_ip != $server_ip)  || !$name || !$group){
+        if (!$this->checkHttp()) {
             return;
         }
-        $this->current_name = $name;
-        $this->current_group = $group;
-
-        ExitException::Init();
-        $before_run = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_BEFORERUN', '');
-        if ($before_run) {
-            $this->callHandler($before_run);
-        }
+        //ExitException::Init();
+        $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');
         $this->doBegin($this->current_name, $this->current_group, $this->current_path_src, $this->current_path_dump);
     }
-
+    protected function call_http_handler($name)
+    {
+        $runner = SuperGlobal::_()->_SERVER($name, '');
+        if ($runner) {
+            $this->callHandler($runner);
+        }
+    }
     public function _OnAfterRun()
     {
-        // $this->current_name = "bbb";
-        // $this->current_group = "t4";
-        // $this->doEnd();
-        // return;
-
-        if (!$this->options['duckcoverage_enable']) {
-            return $this;
-        }
-        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
-        $client_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
-        $server_ip = SuperGlobal::_()->_SERVER('SERVER_ADDR', '');
-        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
-        $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
-        if (($server_ip!=='127.0.0.1') || ($client_ip != $server_ip)  || !$name || !$group){
+        if (!$this->checkHttp()) {
             return;
         }
-        $this->current_name = $name;
-        $this->current_group = $group;
-        
-        $after_run = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_AFTERRUN', '');
-        if ($after_run) {
-            $this->callHandler($after_run);
-        }
-        $this->doEnd();
-//file_put_contents(__DIR__."/z.log","server:".$this->current_group."\n",FILE_APPEND);        
-//file_put_contents(__DIR__."/z.log","server:".$this->current_name."\n",FILE_APPEND);
+        $this->call_http_handler('HTTP_X_MYCOVERAGE_AFTERRUN');
 
+        $this->doEnd();
     }
     //////////////////
     protected function replay()
@@ -348,7 +330,6 @@ trait CommandTrait
 
         $base_url = (string) ($this->options['duckcoverage_web_base_url'] ?? '');
         if ($base_url === '') {
-            // 未配置外部服务器(如 nginx)时,退回内部 PHP 测试服务器
             $this->startServer();
             //$this->getServerBaseUrl();
             $base_url = "http://127.0.0.1:{$this->options['duckcoverage_server_port']}" . $this->options['duckcoverage_homepage'];
@@ -361,6 +342,7 @@ trait CommandTrait
         $is_options = ($method === 'OPTIONS') ? true : false;
 
         $url = rtrim($base_url,'/') . $uri;
+        $this->doEnd();
         $data = $this->curl_file_get_contents($url, $post, $is_ajax, $is_options, $method);
         if ($this->options['duckcoverage_debug_curl_echo_back'] ?? false) {
             echo substr($data, 0, 200);
