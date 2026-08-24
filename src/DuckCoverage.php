@@ -9,13 +9,11 @@ namespace DuckCoverage;
 use DuckPhp\Core\App;
 use DuckPhp\Core\ComponentBase;
 use DuckPhp\Core\Console;
-use DuckPhp\Core\ExitException;
 use DuckPhp\Core\PhaseContainer;
 use DuckPhp\Core\SystemWrapper;
 use DuckPhp\Core\SuperGlobal;
-use DuckPhp\Foundation\Helper;
 use DuckPhp\HttpServer\HttpServer;
-use LibCoverage\GroupCoverageRunner;
+use LibCoverage\GroupCoverage;
 
 class DuckCoverage extends ComponentBase
 {
@@ -58,6 +56,14 @@ class DuckCoverage extends ComponentBase
         $this->options = array_replace_recursive($this->options, (new parent())->options); //merge parent's options;
         parent::__construct();
     }
+    public static function BeforeRun()
+    {
+        return DuckCoverage::_()->_OnBeforeRun();
+    }
+    public static function AfterRun()
+    {
+        return DuckCoverage::_()->_OnAfterRun();
+    }
     public function beforeInit()
     {
         // 我们还要检查有没有开启调试模式，有没有 drvier 。 不需要在 Ext 里加后续 Init;，自己加
@@ -95,17 +101,7 @@ class DuckCoverage extends ComponentBase
         if ($this->options['duckcoverage_reg_console_command']) {
             App::_()->regConsoleCommand(static::class, 'command_');
         }
-        if ($this->options['duckcoverage_reg_web_request']) {
-            $this->prepareForHttp();
-        }
         return $this;
-    }
-    public function prepareForHttp()
-    {
-        $this->_OnBeforeRun();
-        SystemWrapper::register_shutdown_function(function () {
-            $this->_OnAfterRun();
-        });
     }
     protected function checkHttp()
     {
@@ -118,7 +114,7 @@ class DuckCoverage extends ComponentBase
         $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
         $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
         if (($server_ip!=='127.0.0.1') || ($client_ip != $server_ip)  || !$name || !$group){
-            return;
+            return false;
         }
         $this->current_name = $name;
         $this->current_group = $group;
@@ -142,12 +138,14 @@ class DuckCoverage extends ComponentBase
     }
     public function _OnAfterRun()
     {
+        //@codeCoverageIgnoreStart
         if (!$this->checkHttp()) {
             return;
         }
         $this->call_http_handler('HTTP_X_MYCOVERAGE_AFTERRUN');
 
         $this->doEnd();
+        //@codeCoverageIgnoreEnd
     }
     //////////////////
     protected function replay()
@@ -276,7 +274,7 @@ EOT;
     ////[[[[
     protected function getRunner()
     {
-        return GroupCoverageRunner::_();
+        return GroupCoverage::_();
     }
     public function doBegin($name, $group, $path_src, $path_dump)
     {
@@ -297,36 +295,25 @@ trait CommandTrait
     protected function readCommand($request)
     {
         $request = ltrim($request);
-        $map =[
-            '#PHASE' => 'explainPhase',
-            '#CALL' => 'explainCall',
-            '#WEB' => 'explainWeb',
-            '#SETWEB' => 'explainSetWeb',
-            '#CMD' => 'explainCmd',
-        ];
         $flag = preg_match('/^(\S+)\s+(.*)/',$request,$m);
         if ($flag) {
-            $call = ucfirst(substr(strtolower($m[1]),1));
+            $call = ucfirst(strtolower($m[1]));
             $method = "explain".$call;
             if (is_callable([$this, $method])) {
-                call_user_func([$this, $method],$request);
+                \call_user_func([$this, $method],\rtrim($m[2]),$request);
             }else{
-                //echo "Bad Request: $request\n";
+                echo "Bad Request: $request\n";
             }
-            //echo $request;
+            echo $request;
         }
     }
-    public function explainPhase($request)
+    public function explainPhase(string $param)
     {
-        if (substr($request, 0, strlen('#PHASE ')) === '#PHASE ') {
-            $phase = trim(substr($request, strlen('#PHASE ')));
-            App::Phase($phase);
-            return;
-        }
+        App::Phase($param);
     }
-    protected function explainWeb($request)
+    protected function explainWeb(string $param)
     {
-        @list($command, $uri, $poststr, $method) = explode(' ', $request);
+        @list($uri, $poststr, $method) = explode(' ', $param);
 
         $base_url = (string) ($this->options['duckcoverage_web_base_url'] ?? '');
         if ($base_url === '') {
@@ -342,30 +329,34 @@ trait CommandTrait
         $is_options = ($method === 'OPTIONS') ? true : false;
 
         $url = rtrim($base_url,'/') . $uri;
-        $this->doEnd();
+
+        //$this->doEnd();
+        $old_name =  $this->current_name;
+        $this->current_name = "retmote-".$this->current_name;
         $data = $this->curl_file_get_contents($url, $post, $is_ajax, $is_options, $method);
+        $this->current_name  = $old_name;
         if ($this->options['duckcoverage_debug_curl_echo_back'] ?? false) {
             echo substr($data, 0, 200);
         }
     }
-    protected function explainCall($request)
+    protected function explainCall(string $param)
     {
-        @list($command, $func) = explode(' ', $request);
-        $this->callHandler($func);
+        $this->callHandler($param);
     }
-    protected function explainSetweb($request)
+    protected function explainSetweb(string $param)
     {
-        @list($command, $pre_curl, $pre_webcall, $post_webcall, $post_curl) = explode(' ', trim($request));
+        @list($pre_curl, $pre_webcall, $post_webcall, $post_curl) = explode(' ', trim($param));
         $this->pre_curl = ($pre_curl === '_') ? null : $pre_curl;
         $this->pre_webcall = ($pre_webcall === '_') ? null : $pre_webcall;
         $this->post_webcall = ($post_webcall === '_') ? null : $post_webcall;
         $this->post_curl = ($post_curl === '_') ? null : $post_curl;
         return;
     }
-    protected function explainCmd($request)
+    protected function explainCmd(string $param)
     {
+        $argv = $this->shell_parse($param);
         $__SERVER = $_SERVER;
-        $_SERVER['argv'] =['-','cmdback'];
+        $_SERVER['argv'] = $argv;
         App::_()->execute();
         $_SERVER = $__SERVER;
     }
@@ -375,9 +366,8 @@ trait CommandTrait
         if (!isset($handler)) {
             return;
         }
-        $handler = trim($handler);
-        //$handler = "DuckAdmin\\Test\\Tester@_justTest?parameter=d";
-        $flag = preg_match('/^(([a-zA-Z0-9_\x7f-\xff\\\\]+)(\:\:|\@|\->)([a-zA-Z0-9_\x7f-\xff]+)|([a-zA-Z0-9_\x7f-\xff]+))(\?(\S*))?$/', $handler, $m);
+        //$handler = "DuckAdmin\\Test\\Tester@_justTest parameter=d";
+        $flag = preg_match('/^(([a-zA-Z0-9_\x7f-\xff\\\\]+)(\:\:|\@|\->)([a-zA-Z0-9_\x7f-\xff]+)|([a-zA-Z0-9_\x7f-\xff]+))( (\S*))?$/', $handler, $m);
         if (!$flag) {
             return false;
         }
@@ -420,6 +410,65 @@ trait CommandTrait
         $ret = $reflect->invokeArgs(is_object($object) ? $object : null, $args);
         return $ret;
     }
+    function shell_parse(string $str): array
+    {
+        $result = [];
+        $buffer = '';
+        $inSingle = false;
+        $inDouble = false;
+        $escape = false;
+
+        $len = mb_strlen($str); // 改用 mb_strlen 支持多字节
+        for ($i = 0; $i < $len; $i++) {
+            $c = mb_substr($str, $i, 1); // 改用 mb_substr
+            
+            if ($escape) {
+                // 在双引号内，只有特定字符才被转义
+                if ($inDouble) {
+                    if ($c === '"' || $c === '\\' || $c === '$') {
+                        $buffer .= $c;
+                    } else {
+                        $buffer .= '\\' . $c; // 其他字符保留反斜杠
+                    }
+                } else {
+                    $buffer .= $c;
+                }
+                $escape = false;
+                continue;
+            }
+            
+            if ($c === '\\' && !$inSingle) {
+                $escape = true;
+                continue;
+            }
+            
+            if ($c === "'" && !$inDouble) {
+                $inSingle = !$inSingle;
+                continue;
+            }
+            
+            if ($c === '"' && !$inSingle) {
+                $inDouble = !$inDouble;
+                continue;
+            }
+            
+            if (!$inSingle && !$inDouble && ctype_space($c)) {
+                if ($buffer !== '') {
+                    $result[] = $buffer;
+                    $buffer = '';
+                }
+            } else {
+                $buffer .= $c;
+            }
+        }
+        
+        if ($buffer !== '') {
+            $result[] = $buffer;
+        }
+        
+        return $result;
+    }
+
 }
 trait HttpServerTrait
 {

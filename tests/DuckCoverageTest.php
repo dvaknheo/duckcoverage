@@ -25,7 +25,8 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
             'path'=>$path,
             'duckcoverage_callback' =>[DuckCoverageTestList::class,'GetTestList']
         ];
-        DuckCoverageApp::_(\MyDuckCoverageApp::_())->init($options);
+        //DuckCoverageApp::_(\MyDuckCoverageApp::_())->init($options);
+        DuckCoverageApp::_()->init($options);
 
         $this->cmd("duckcover --help");
         $this->cmd("duckcover --watch");
@@ -91,11 +92,6 @@ class MyDuckCoverageApp extends tests\DuckCoverage\DuckCoverageApp
         parent::onPrepare();
         $this->options['cmd'] = array_merge([static::class => true], $this->options['cmd']);
     }
-    public function command_cmdback()
-    {
-        $data = Console::_()->getCliParameters();
-        var_dump($data);
-    }
 
 }
 
@@ -113,6 +109,10 @@ EOT;
 }
 class DuckCoverageEx extends DuckCoverage
 {
+   public function checkHttp()
+   {
+        return parent::checkHttp();
+   }
     public function readCommand($request)
     {
         return parent::readCommand($request);
@@ -130,6 +130,12 @@ class DuckCoverageEx extends DuckCoverage
 }
 class DuckCoverageApp extends DuckPhp
 {
+    public function command_cmdback()
+    {
+        $data = Console::_()->getCliParameters();
+        var_dump($data);
+    }
+
     public static function beforerun()
     {
         var_dump(DATE(DATE_ATOM));
@@ -157,15 +163,12 @@ class DuckCoverageApp extends DuckPhp
     public static function Callback()
     {
         var_dump(DATE(DATE_ATOM));
-        //$path = LibCoverage::_()->getClassTestPath(DuckCoverage::class);
-        //file_put_contents($path.'x.log',DATE(DATE_ATOM));
         return;
     }
 
     public $options =[
         'duckcoverage_enable'=>true,
-        'duckcoverage_echo_back' => true,
-
+        'duckcoverage_debug_curl_echo_back' => true,
     ];
     public function __construct()
     {
@@ -181,7 +184,10 @@ class DuckCoverageApp extends DuckPhp
             'controller_method_prefix' => 'action_',
         ];
         $this->options = array_merge($this->options, $ext_options);
+        $this->options['cmd'] = array_merge([static::class => true], $this->options['cmd']);
+
     }
+
     public function action_index()
     {
         setcookie('CK'.DATE('His'),DATE('Y-m-d H:i:s'));
@@ -193,12 +199,11 @@ class DuckCoverageApp extends DuckPhp
         parent::onPrepare();
         // something from setting;
     }
-    #[Override]
     public function serve(): bool
     {
-        DuckCoverage::_()->_OnBeforeRun();
+        DuckCoverage::BeforeRun();
         $flag = parent::serve();
-        DuckCoverage::_()->_OnAfterRun();
+        DuckCoverage::AfterRun();
         return $flag;
     }
     public function testMore()
@@ -213,27 +218,46 @@ class DuckCoverageApp extends DuckPhp
         $this->options['duckcoverage_enable']=true;
 
         $str=<<<EOT
-#PHASE 
-#CALL {static}::Callback
-#CMD cmdback
-#SETWEB {static}::pre_curl {static}::pre_web {static}::prost_web {static}::post_curl
-#WEB /
-#WEB / a=b POST
-#SETWEB AJAX _ _ _
-#WEB /
-#CALL {static}::cloze_curl
-#SETWEB OPTIONS _ _ _
-#WEB /
-
-#CMD cmdback
+BAD
+PHASE
+CALL {static}::Callback
+CMD cmdback
+SETWEB {static}::pre_curl {static}::pre_web {static}::prost_web {static}::post_curl
+WEB /
+WEB / a=b POST
+SETWEB AJAX _ _ _
+WEB /
+CALL {static}::cloze_curl
+SETWEB OPTIONS _ _ _
+WEB /
 
 EOT;
+
+$testInputs = <<<'TESTCASES'
+
+a b
+'a b'
+"a b"
+a\ b
+"a\"b"
+\xF0\x9F\x98\x80
+TESTCASES;
+
         $str = str_replace('{static}',static::class,$str);
+        $str = str_replace('{cliprefix}',$this->getThisCommandPrefix(),$str);
         $cmds = explode("\n",$str);
         foreach($cmds as $cmd){
             DuckCoverageEx::_()->readCommand($cmd);
         }
         DuckCoverageEx::_()->testRunServer();
+
+
+        DuckCoverageEx::_()->options['duckcoverage_enable'] = true;
+        DuckCoverageEx::_()->checkHttp();
+
+        DuckCoverageEx::_()->options['duckcoverage_enable'] =false;
+        DuckCoverageEx::_()->_OnBeforeRun();
+        DuckCoverageEx::_()->options['duckcoverage_enable'] = true;
     }
     public static function cloze_curl()
     {
@@ -245,7 +269,6 @@ class DuckCoverageTestList
     public static function Callback()
     {
         $path = LibCoverage::_()->getClassTestPath(DuckCoverage::class);
-        file_put_contents($path.'x.log',DATE(DATE_ATOM));
         return;
     }
     public static function GetTestList()
@@ -254,7 +277,7 @@ class DuckCoverageTestList
         $str=<<<EOT
 #PHASE 
 #CALL MyDuckCoverageApp::Callback
-#CMD cmdback
+#CMD cmdback a b 
 #SETWEB _ _ _ _
 #WEB /
 
