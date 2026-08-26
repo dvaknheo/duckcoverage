@@ -233,6 +233,7 @@ class DuckCoverageApp extends DuckPhp
         $this->options['duckcoverage_enable']=true;
 
         $str=<<<EOT
+COMMENT just a test
 BAD 
 PHASE 
 CALL {static}::Callback
