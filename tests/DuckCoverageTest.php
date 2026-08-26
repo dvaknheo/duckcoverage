@@ -109,12 +109,27 @@ EOT;
 }
 class DuckCoverageEx extends DuckCoverage
 {
-   public function checkHttp()
-   {
+    public $stop = false;
+    public function checkHttp()
+    {
         return parent::checkHttp();
-   }
+    }
+    #[Override]
+    public function doBegin()
+    {
+        if($this->stop){return;}
+        return parent::doBegin();
+    }
+    #[Override]
+    public function doEnd()
+    {
+        if($this->stop){return;}
+        return parent::doEnd();
+    }
     public function readCommand($request)
     {
+        $this->current_group = 'nogroup';
+        $this->current_name = 'noname';
         return parent::readCommand($request);
     }
     public function testRunServer()
@@ -268,6 +283,7 @@ TESTCASES;
         $str = str_replace('{static}',static::class,$str);
         $str = str_replace('{cliprefix}',$this->getThisCommandPrefix(),$str);
         $cmds = explode("\n",$str);
+        DuckCoverageEx::_()->stop =true;
         foreach($cmds as $cmd){
             DuckCoverageEx::_()->readCommand($cmd);
         }
@@ -280,6 +296,7 @@ TESTCASES;
         DuckCoverageEx::_()->options['duckcoverage_enable'] =false;
         DuckCoverageEx::_()->_OnBeforeRun();
         DuckCoverageEx::_()->options['duckcoverage_enable'] = true;
+        DuckCoverageEx::_()->stop = false;
     }
     private function str_replace_first(string $search, string $replace, string $subject): string
     {

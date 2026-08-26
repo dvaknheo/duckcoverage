@@ -398,6 +398,7 @@ trait DuckCoverage_CommandTrait
             parse_str($poststr, $input);
         }
         $reflect = null;
+        $object = null;
         if (!$function) {
             if ($type === '@') {
                 $object = $class::_();
