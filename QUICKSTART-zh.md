@@ -13,16 +13,6 @@
 | PHP | >= 7.4 |
 | 覆盖率驱动 | 已加载 **Xdebug** 或 **PCOV**（`php -m` 里能看到其一） |
 | 框架 | DuckPHP >= 1.4.1（内置 `DuckPhp\HttpServer\HttpServer`） |
-| 依赖包 | `phpunit/php-code-coverage`（9.x，php-code-coverage 的 `Driver\Selector` API） |
-
-检查驱动：
-
-```bash
-php -m | findstr /i "xdebug pcov"        # Windows
-php -m | grep -i -E "xdebug|pcov"        # Linux / macOS
-```
-
-没有驱动时，DuckCoverage 会给出报错（`doBegin` 阶段无法创建 `CodeCoverage`），先装上驱动再来。
 
 ---
 
@@ -32,181 +22,138 @@ php -m | grep -i -E "xdebug|pcov"        # Linux / macOS
 
 ```bash
 composer require dvaknheo/duckcoverage
-composer require --dev phpunit/php-code-coverage ^9.0   # 按你的 PHP 版本选择合适的版本
 ```
-
-> duckcoverage 的 `composer.json` 只在 `require-dev` 里声明了 `dvaknheo/libcoverage`（用于本项目自身的开发测试），运行时依赖需要你显式安装。
 
 ---
 
 ## 3. 在 DuckPHP 应用中启用
 
-编辑你的应用入口类（如 `src/System/App.php`）：
+一般用法，我们以 dvaknheo/duckadmin 包为例
 
 ```php
 <?php
-namespace MyApp\System;
+namespace DuckAdminDemo\System;
 
 use DuckCoverage\DuckCoverage;
 
-class App extends \DuckPhp\DuckPhp
+class DemoApp extends DuckPhp
 {
     public $options = [
         // ... 你原有的选项 ...
+        'duckcoverage_enable' => true,
 
-        // 注册扩展
-        'ext' => [
-            DuckCoverage::class => true,
-        ],
+        'duckcoverage_callback'=> [TestLister::class ,'GetTestList'],
+        'duckcoverage_report_direct' => false,
+        'duckcoverage_web_base_url' => 'http://www.***.com/',
 
-        // 常用配置（均为可选，括号内是默认值）
-        'duckcoverage_enable' => true,                    // 总开关
-        'duckcoverage_path_src' => __DIR__ . '/../',      // 要统计的源码目录（必配！见下方说明）
-        'duckcoverage_server_port' => 8080,               // 内置测试服务器端口
-        'duckcoverage_homepage' => '/index_dev.php/',     // 内置服务器基础 URI
-        // 'duckcoverage_web_base_url' => 'http://admin.duckphp-local.com/', // 用外部服务器时设置
-        // 'duckcoverage_callback' => \MyApp\Test\Tester::class,          // 回放回调类
     ];
+    protected function onPrepare(): void
+    {
+        parent::onPrepare();
+        if (class_exsits(DuckCoverage::class)) {
+            DuckCoverage::Prepare();
+        }
+    }
+    public function serve(): bool
+    {
+        if (!class_exsits(DuckCoverage::class)) {
+            return parent::serve();
+        }
+        DuckCoverage::BeforeRun();
+        $flag = $parent::serve();
+        DuckCoverage::AfterRun();
+        return $flag;
+    }
 }
 ```
 
-> **重要：`duckcoverage_path_src` 必须显式配置。** 它的默认值是 duckcoverage 包自身的 `src/`（统计的是本扩展的源码），不配置的话报告里看不到你的应用代码。建议用绝对路径（如上面 `__DIR__ . '/../'`），或用相对 `runtime/` 的路径（如 `'../src'`）。
-
----
-
-## 4. 流程 A：Web 测试（推荐）
-
-这是 DuckCoverage 的核心用法：**真实浏览你的网站，覆盖率自动采集，然后回放并出报告。**
-
-### 4.1 开始监听
-
-```bash
-php cli.php duckcover --watch mygroup
-```
-
-输出 `watching mygroup`，此时 `runtime/DuckCoverage.watching.txt` 已写入。组名 `mygroup` 随便起，用于区分多轮测试。
-
-### 4.2 触发请求（带追踪头）
-
-用 curl 携带追踪头访问你的应用：
-
-```bash
-curl -H "X-MyCoverage-Name: mygroup" "http://127.0.0.1:8080/index_dev.php/admin/index"
-curl -H "X-MyCoverage-Name: mygroup" -d "username=admin&password=123456" "http://127.0.0.1:8080/index_dev.php/admin/login"
-```
-
-- 内置服务器：URL = `http://127.0.0.1:{duckcoverage_server_port}` + `duckcoverage_homepage` + 你的路径。
-- 外部服务器（nginx 等）：先配置 `duckcoverage_web_base_url`，然后用外部 URL 访问即可。
-- 浏览器手动测试也行，但需要能自定义请求头（如 DevTools 里改请求头，或用代理工具）。
-- 每次命中追踪头的请求都会：① 追加到 `test_coveragedumps/mygroup.list`（请求记录）；② 采集并把覆盖率 dump 到 `test_coveragedumps/mygroup/`。
-
-### 4.3 配置回放回调类
-
-`--replay` 需要回调类提供测试列表。新建一个实现 `DuckCoverageCBInterface` 的类（如 `src/Test/Tester.php`）：
-
 ```php
 <?php
-namespace MyApp\Test;
+namespace DuckAdminDemo\System;
 
-use DuckCoverage\DuckCoverageCBInterface;
-
-class Tester implements DuckCoverageCBInterface
+class TestLister
 {
-    public static function BeforeReplayTest() {}
-    public static function AfterReplayTest() {}
-    public static function OnReport() {}
 
     public static function GetTestList()
     {
-        // 可以直接把 test_coveragedumps/mygroup.list 的内容粘到这里，
-        // 也可以手写（支持 #WEB / #CALL / #SETWEB / #PHASE / #URL_PREFIX / #CMD 指令）
         return <<<EOT
-#WEB /admin/index
-#WEB /admin/login username=admin&password=123456
-#CMD php cli.php admin/clean
-#CALL MyApp/Test/Tester@doSomething
+WEB /admin/index
+WEB /admin/login username=admin&password=123456
+CMD php cli.php admin/clean
+CALL MyApp/Test/Tester@doSomething
 EOT;
     }
 }
 ```
 
-然后在 `App::$options` 里注册：
+// 和其他常见 DuckPhp 插件不同的, DuckCoverage 必须按示例在根应用做初始化。 DuckCoverage 选项也需要放进 根应用的应用选项里。
 
-```php
-'duckcoverage_callback' => \MyApp\Test\Tester::class,
-```
 
-### 4.4 回放
+### 3.1 执行测试
 
 ```bash
-php cli.php duckcover --replay
+php cli.php duckcover --go group1
 ```
+//TODO 结果展示
+执行之后
+根据 duckcoverage_callback 返回的 命令清单执行一系列结果
+然后在 `runtime/DuckCoverage/group1.report/` 的位置生成测试覆盖报告。
 
-回放会启动内置测试服务器（或请求外部服务器），逐条执行测试列表，每条请求都会重新采集覆盖率（curl 会自动带上 `X-MyCoverage-Name` 头）。结束时自动停止服务器。
-
-### 4.5 生成报告
+## 4. 命令行参考
 
 ```bash
-php cli.php duckcover --report
+php cli.php duckcover 
+--watch {group}
+--replay
+--stop
+--report group1
+--report group1 group2 group3
+--go {group}
+
 ```
 
-输出类似：
 
-```
-reporting...
-time_cost   : 0.523 seconds
-output path : runtime/test_reports/
-```
+## 5 测试指令参考
 
-用浏览器打开 `runtime/test_reports/index.html` 查看行覆盖率。红/黄标记的行就是没执行到的代码。
-
-### 4.6 结束监听
-
-```bash
-php cli.php duckcover --stop
-```
-
----
-
-## 5. 流程 B：CLI 直接调用
-
-不经过 HTTP，直接调用类方法/函数采集覆盖率：
-
-```bash
-# 类名用斜杠分隔（自动转成反斜杠），@ 表示单例 _() 调用
-php cli.php duckcover --call MyApp/Test/Tester@doSomething
-
-# 其他写法：Class->method（new 实例）、Class::method（静态）、纯函数
-php cli.php duckcover --call MyApp/Business/DemoBusiness->handle
-php cli.php duckcover --call MyApp/Helper::format
-php cli.php duckcover --call some_function
-```
-
-带参数（`?key=value`，按方法参数名匹配）：
-
-```bash
-php cli.php duckcover --call MyApp/Test/Tester@runX?parameter=d
-```
-
-调用结果与 dump 都落入当前监听组的 `test_coveragedumps/`，之后照常 `--report`。
-
----
-
-## 6. 测试列表指令速查
-
+下面是全部测试指令：
 | 指令 | 示例 | 说明 |
 |---|---|---|
-| `#WEB` | `#WEB /admin/index` | 回放一个 Web 请求；第二段是 POST 参数（`a=1&b=2`），第三段可写 `AJAX` 或 `OPTIONS` |
-| `#CALL` | `#CALL Foo/Bar@run?x=1` | 直接调用本地类/函数 |
-| `#SETWEB` | `#SETWEB _ _ _ _` | 给后续 `#WEB` 设置钩子，依次为 `pre_curl pre_webcall post_webcall post_curl`，`_` 表示清除 |
-| `#PHASE` | `#PHASE api` | 切换 DuckPHP phase（空值忽略） |
-| `#URL_PREFIX` | `#URL_PREFIX /v1` | 给后续 `#WEB` 的 URI 补前缀 |
-| `#CMD` | `#CMD php cli.php admin/clean` | 原样执行 shell 命令（不做转义；非 0 退出码只打印警告、不中断回放）；以此方式启动的 DuckPHP CLI 入口同样采集覆盖率（组名通过 `MYCOVERAGE_NAME` 环境变量传递）。请仅回放可信测试列表 |
-| `##` | `## 注释` | 注释行，忽略 |
-
+| `WEB` | `WEB /admin/index` | 回放一个 Web 请求；第二段是 POST 参数（`a=1&b=2`），第三段可写 `AJAX` 或 `OPTIONS` |
+| `CMD` | `CMD callme admin/clean` | 原样执行 shell 命令 |
+| `CALL` | `CALL Foo/Bar@run x=1` | 直接调用本地类/函数 |
+| `SETWEB` | `SETWEB _ _ _ _` | 给后续 `#WEB` 设置钩子，依次为 `pre_curl pre_webcall post_webcall post_curl`，`_` 表示清除 |
+| `PHASE` | `PHASE api` | 切换 DuckPHP phase |
 ---
 
-## 7. 使用外部服务器（nginx 等）
+## 6. 选项参考
+
+``` php
+    public $options = [
+        'duckcoverage_enable' => true,
+        'duckcoverage_callback' => null,
+
+        'duckcoverage_data_file_json_file'=> 'DuckPhpData-duckcoverage.config.json',
+        'duckcoverage_reg_console_command' => true,
+
+        'duckcoverage_path' => '',
+        'duckcoverage_path_src' => 'src/',
+        'duckcoverage_report_direct' => false,
+
+        'duckcoverage_web_base_url' => '',
+        // 外部服务器(如 nginx)基础 URL,如 http://admin.duckphp-local.com/ ;空则退回内部测试服务器
+        'duckcoverage_server_port' => 8017,
+        'duckcoverage_server_host' => '',
+        'duckcoverage_path_server' => '',
+        'duckcoverage_path_document' => 'public',
+        'duckcoverage_homepage' => '/',
+        'duckcoverage_new_server' => true,
+        'duckcoverage_debug_curl_echo_back' => false,
+
+    ];
+```
+### 6.1 说明
+
+### 6.2 使用外部服务器（nginx 等）
 
 不想用内置测试服务器时，配置外部服务器地址：
 
@@ -220,7 +167,7 @@ php cli.php duckcover --call MyApp/Test/Tester@runX?parameter=d
 
 ---
 
-## 8. 常见问题
+## 7. 常见问题
 
 **Q：报告里没有我的应用代码？**
 `duckcoverage_path_src` 没配或配错。它默认指向 duckcoverage 包自身的 `src/`，请显式配置为你的源码目录（推荐绝对路径）。
@@ -229,7 +176,7 @@ php cli.php duckcover --call MyApp/Test/Tester@runX?parameter=d
 缺少 `phpunit/php-code-coverage`，或没有加载 xdebug/pcov 驱动。见第 1、2 节。
 
 **Q：`--replay` 什么都没做？**
-回放依赖 `duckcoverage_callback` 的 `GetTestList()`。先配置回调类（见 4.3），或先跑一轮带追踪头的请求生成 `.list` 作为参考。
+回放依赖 `duckcoverage_callback` 的 `GetTestList()`。
 
 **Q：端口 8080 被占用？**
 改 `duckcoverage_server_port`。
@@ -242,28 +189,6 @@ php cli.php duckcover --call MyApp/Test/Tester@runX?parameter=d
 
 **Q：报告目录太乱？**
 设置 `duckcoverage_report_direct => false`，报告会按组名（单组）或日期（多组）分目录存放。
-
----
-
-## 9. 使用 Docker 开发环境（可选）
-
-`docker/test-php84/` 提供了 PHP 8.4 + Xdebug 的 docker compose 环境（镜像定义与 duckphp 开发版一致，可复用其构建缓存）：
-
-```bash
-cd docker/test-php84
-./start-docker.sh                                   # 构建并启动容器 duckcoverage-test84
-./exec-docker.sh composer install --no-interaction --prefer-dist  # 首次安装依赖（使用 composer-test-php84.json）
-./exec-docker.sh php -l src/DuckCoverage.php        # 语法检查
-./exec-docker.sh php -r 'var_dump(PHP_VERSION);'    # 在容器内执行任意命令
-./stop-docker.sh                                    # 停止容器（保留容器与卷）
-./end-docker.sh                                     # 停止并删除容器
-```
-
-说明：
-
-- 容器把工程根挂载到 `/DATA`，`composer-test-php84.json` 覆盖容器内的 `composer.json`（比发布版额外引入 `dvaknheo/duckphp ^1.4.1`、`phpunit/php-code-coverage ^11.0` 用于测试）；`vendor/` 与 composer 缓存使用命名卷，跨容器保留。
-- 已设置 `XDEBUG_MODE=coverage`，容器内可直接跑覆盖率采集。
-- `test_reports/`、`test_coveragedumps/` 挂载到 docker 目录下，方便在宿主机查看输出。
 
 ---
 
