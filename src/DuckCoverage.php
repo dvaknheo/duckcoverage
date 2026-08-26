@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 /**
  * DuckPhp
  * From this time, you never be alone~
@@ -24,7 +26,7 @@ class DuckCoverage extends ComponentBase
     //todo use  global singletonex to replace default singleton function
     public $options = [
         'duckcoverage_enable' => true,
-        'duckcoverage_data_file_json_file'=> 'DuckPhpData-duckcoverage.config.json',
+        'duckcoverage_data_file_json_file' => 'DuckPhpData-duckcoverage.config.json',
         'duckcoverage_reg_console_command' => true,
         'duckcoverage_callback' => null,
 
@@ -70,8 +72,8 @@ class DuckCoverage extends ComponentBase
     public function beforeInit($options = [])
     {
         App::_()->options = array_merge($this->options, App::_()->options);
-        if(!App::_()->options['duckcoverage_enable']) {
-            return ;
+        if (!App::_()->options['duckcoverage_enable']) {
+            return;
         }
         if (!App::_()->isRoot()) {
             return;
@@ -79,16 +81,16 @@ class DuckCoverage extends ComponentBase
         if ($this->needMoveDateJsonFile()) {
             $this->moveDateJsonFile();
         }
-    
+
         App::_()->options['ext'][static::class] = true;
         PhaseContainer::_()->addPublicClasses([static::class => true]);
     }
     protected function needMoveDateJsonFile()
     {
         $cmd =  $_SERVER['argv'][1]  ?? '';
-        if (PHP_SAPI !=='cli'){
+        if (PHP_SAPI !== 'cli') {
             return true; //@codeCoverageIgnore
-        } else if (PHP_SAPI ==='cli' && $cmd ==='duckcover') {
+        } else if (PHP_SAPI === 'cli' && $cmd === 'duckcover') {
             return true;
         }
         return false;
@@ -110,12 +112,12 @@ class DuckCoverage extends ComponentBase
         $path_project = App::_()->getProjectPath();
         $path_runtime = App::_()->getRuntimePath();
 
-        $this->options['duckcoverage_path'] = $path_runtime .'DuckCoverage/';  //TODO
+        $this->options['duckcoverage_path'] = $path_runtime . 'DuckCoverage/';  //TODO
         $this->options['duckcoverage_path_server'] =  $this->options['duckcoverage_path_server'] ?
-        $this->options['duckcoverage_path_server'] : $path_project;
+            $this->options['duckcoverage_path_server'] : $path_project;
 
-        $is_abs = preg_match('/^(?:[A-Za-z]:[\/\\\\]|[\/\\\\]{2,}|[\/\\\\])/',$this->options['duckcoverage_path_src'] ?? '') > 0;
-        $this->current_path_src = $is_abs ? $this->options['duckcoverage_path_src'] : $path_project.$this->options['duckcoverage_path_src'];
+        $is_abs = preg_match('/^(?:[A-Za-z]:[\/\\\\]|[\/\\\\]{2,}|[\/\\\\])/', $this->options['duckcoverage_path_src'] ?? '') > 0;
+        $this->current_path_src = $is_abs ? $this->options['duckcoverage_path_src'] : $path_project . $this->options['duckcoverage_path_src'];
         $this->current_path_dump = $this->options['duckcoverage_path'];
 
         @mkdir($this->options['duckcoverage_path']);
@@ -123,8 +125,8 @@ class DuckCoverage extends ComponentBase
         if ($this->options['duckcoverage_reg_console_command']) {
             App::_()->regConsoleCommand(static::class, 'command_');
         }
-        Route::_()->addRouteHook([static::class,'BeforeRun'], 'prepend-outter');
-        Route::_()->addRouteHook([static::class,'AfterRun'], 'finally-outter');
+        Route::_()->addRouteHook([static::class, 'BeforeRun'], 'prepend-outter');
+        Route::_()->addRouteHook([static::class, 'AfterRun'], 'finally-outter');
 
         return $this;
     }
@@ -138,7 +140,7 @@ class DuckCoverage extends ComponentBase
         $server_ip = SuperGlobal::_()->_SERVER('SERVER_ADDR', '');
         $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
         $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
-        if (($server_ip!=='127.0.0.1') || ($client_ip != $server_ip)  || !$name || !$group){
+        if (($server_ip !== '127.0.0.1') || ($client_ip != $server_ip)  || !$name || !$group) {
             return false;
         }
         $this->current_name = $name;
@@ -207,10 +209,10 @@ EOT;
         if ($p['watch'] ?? false) {
             $watch_name = $p['watch'];
             if ($watch_name === true) {
-                $watch_name = 'default_'. DATE('Y_m_d_H_i_s');
+                $watch_name = 'default_' . DATE('Y_m_d_H_i_s');
             }
             $this->watchingBegin($watch_name);
-            
+
             echo "watching {$watch_name}\n";
         }
         if ($p['stop'] ?? false) {
@@ -228,12 +230,11 @@ EOT;
                 $groups = $this->watchingGetName();
             }
             $this->doReport($groups);
-            
         }
         if ($p['go'] ?? false) {
-           $watch_name = $p['go'];
+            $watch_name = $p['go'];
             if ($watch_name === true) {
-                $watch_name = 'default_'. DATE('Y_m_d_H_i_s');
+                $watch_name = 'default_' . DATE('Y_m_d_H_i_s');
             }
             $this->options['duckcoverage_report_direct'] = true;
             $this->watchingBegin($watch_name);
@@ -246,16 +247,16 @@ EOT;
     }
     protected function doReport($groups)
     {
-        $groups = is_array($groups)?$groups:[$groups];
+        $groups = is_array($groups) ? $groups : [$groups];
         $time_begin = microtime(true);
 
         $path_report = $this->current_path_dump;
-        if (count($groups)===1 && !$this->options['duckcoverage_report_direct']) {
-            $path_report = $path_report. $groups[0].'.report';
+        if (count($groups) === 1 && !$this->options['duckcoverage_report_direct']) {
+            $path_report = $path_report . $groups[0] . '.report';
         } else {
-            $path_report = $path_report.'AAAAA.report';
+            $path_report = $path_report . 'AAAAA.report';
         }
-        $this->createReport($groups,$this->current_path_src,$this->current_path_dump,$path_report);
+        $this->createReport($groups, $this->current_path_src, $this->current_path_dump, $path_report);
         $time_end = microtime(true);
         $time_cost = $time_end - $time_begin;
         $time_cost = sprintf('%0.3f', $time_cost);
@@ -266,23 +267,23 @@ EOT;
     protected function watchingBegin($name)
     {
         $this->current_group = $name;
-        file_put_contents($this->current_path_dump. $name.'.watch.lock',DATE(DATE_ATOM));
-        file_put_contents($this->current_path_dump.'DuckCoverage.watching.txt',$name);
+        file_put_contents($this->current_path_dump . $name . '.watch.lock', DATE(DATE_ATOM));
+        file_put_contents($this->current_path_dump . 'DuckCoverage.watching.txt', $name);
     }
     protected function watchingEnd()
     {
         $this->current_group = null;
         $name = $this->watchingGetName();
-        @unlink($this->options['duckcoverage_path'].'DuckCoverage.watching.txt');
-        @unlink($this->options['duckcoverage_path']. basename($name).'.watch.lock');
+        @unlink($this->options['duckcoverage_path'] . 'DuckCoverage.watching.txt');
+        @unlink($this->options['duckcoverage_path'] . basename($name) . '.watch.lock');
     }
     protected function watchingGetName()
     {
         if ($this->current_group) {
             return $this->current_group;
         }
-        $group = @file_get_contents($this->options['duckcoverage_path'].'DuckCoverage.watching.txt');
-        return $group;    
+        $group = @file_get_contents($this->options['duckcoverage_path'] . 'DuckCoverage.watching.txt');
+        return $group;
     }
     ////]]]]
     ////[[[[
@@ -300,7 +301,7 @@ EOT;
     }
     public function createReport($groups, $path_src, $path_dump, $path_report)
     {
-        return $this->getRunner()->createReport( $groups, $path_src, $path_dump, $path_report);
+        return $this->getRunner()->createReport($groups, $path_src, $path_dump, $path_report);
     }
     ////]]]]
 }
@@ -309,18 +310,19 @@ trait DuckCoverage_CommandTrait
     protected function readCommand($request)
     {
         $request = ltrim($request);
-        $flag = preg_match('/^(\S+)\s+(.*)/',$request,$m);
+        $flag = preg_match('/^(\S+)\s+(.*)/', $request, $m);
         if ($flag) {
-            $this->current_name = "[{$this->current_group} ".(new \DateTime())->format('Y-m-d_H_i_s.v')."]".$request;
+            $this->current_name = "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
 
             $call = ucfirst(strtolower($m[1]));
-            $method = "explain".$call;
+            $method = "explain" . $call;
             if (is_callable([$this, $method])) {
-                \call_user_func([$this, $method],\rtrim($m[2]),$request);
-            }else{
+                \call_user_func([$this, $method], \rtrim($m[2]), $request);
+            } else {
                 echo "Bad Request: $request\n";
             }
-            echo $request; echo "\n";
+            echo $request;
+            echo "\n";
         }
     }
     public function explainPhase(string $param)
@@ -346,7 +348,7 @@ trait DuckCoverage_CommandTrait
         $is_ajax = ($method === 'AJAX') ? true : false;
         $is_options = ($method === 'OPTIONS') ? true : false;
 
-        $url = rtrim($base_url,'/') . $uri;
+        $url = rtrim($base_url, '/') . $uri;
 
         $data = $this->curl_file_get_contents($url, $post, $is_ajax, $is_options, $method);
 
@@ -374,9 +376,9 @@ trait DuckCoverage_CommandTrait
         $this->doBegin();
         $argv = $this->shell_parse($param);
 
-        array_unshift($argv,'-');
+        array_unshift($argv, '-');
         $__SERVER = $_SERVER;
-    
+
         $_SERVER['argv'] = $argv;
 
         App::_()->execute();
@@ -420,7 +422,6 @@ trait DuckCoverage_CommandTrait
             } else if ($type === '::') {
                 $reflect = new \ReflectionMethod($class, $method);
             }
-            
         } else {
             $reflect = new \ReflectionFunction($function);
         }
@@ -454,7 +455,7 @@ trait DuckCoverage_CommandTrait
         $len = mb_strlen($str); // 改用 mb_strlen 支持多字节
         for ($i = 0; $i < $len; $i++) {
             $c = mb_substr($str, $i, 1); // 改用 mb_substr
-            
+
             if ($escape) {
                 // 在双引号内，只有特定字符才被转义
                 if ($inDouble) {
@@ -469,22 +470,22 @@ trait DuckCoverage_CommandTrait
                 $escape = false;
                 continue;
             }
-            
+
             if ($c === '\\' && !$inSingle) {
                 $escape = true;
                 continue;
             }
-            
+
             if ($c === "'" && !$inDouble) {
                 $inSingle = !$inSingle;
                 continue;
             }
-            
+
             if ($c === '"' && !$inSingle) {
                 $inDouble = !$inDouble;
                 continue;
             }
-            
+
             if (!$inSingle && !$inDouble && ctype_space($c)) {
                 if ($buffer !== '') {
                     $result[] = $buffer;
@@ -494,14 +495,13 @@ trait DuckCoverage_CommandTrait
                 $buffer .= $c;
             }
         }
-        
+
         if ($buffer !== '') {
             $result[] = $buffer;
         }
-        
+
         return $result;
     }
-
 }
 trait DuckCoverage_HttpServerTrait
 {
