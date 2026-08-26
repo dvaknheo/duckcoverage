@@ -212,15 +212,8 @@ class DuckCoverageApp extends DuckPhp
     }
     protected function onPrepare(): void
     {
-        DuckCoverage::Prepare();
         parent::onPrepare();
-    }
-    public function serve(): bool
-    {
-        DuckCoverage::BeforeRun();
-        $flag = parent::serve();
-        DuckCoverage::AfterRun();
-        return $flag;
+        DuckCoverage::Prepare();
     }
     public function func($name, $default='_')
     {
@@ -230,11 +223,13 @@ class DuckCoverageApp extends DuckPhp
     {
         $this->is_root = false;
         DuckCoverage::_()->init($this->options,null);
+        DuckCoverage::_()->beforeInit();
         $this->is_root = true;
 
         $this->options['duckcoverage_enable']=false;
         DuckCoverage::_()->options['duckcoverage_enable']=true;
         DuckCoverage::_()->init($this->options,null);
+        DuckCoverage::_()->beforeInit();
         $this->options['duckcoverage_enable']=true;
 
         $str=<<<EOT

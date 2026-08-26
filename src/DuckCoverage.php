@@ -69,23 +69,34 @@ class DuckCoverage extends ComponentBase
     }
     public function beforeInit($options = [])
     {
+        App::_()->options = array_merge($this->options, App::_()->options);
         if(!App::_()->options['duckcoverage_enable']) {
             return ;
         }
         if (!App::_()->isRoot()) {
             return;
         }
-        $cmd =  $_SERVER['argv'][1]  ?? '';
-        if (PHP_SAPI !=='cli'){
-            App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
-            App::_()->options['data_file_enable'] = true;
-        }else if (PHP_SAPI ==='cli' && $cmd ==='duckcover') {
-            App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
-            App::_()->options['data_file_enable'] = true;
+        if ($this->needMoveDateJsonFile()) {
+            $this->moveDateJsonFile();
         }
     
         App::_()->options['ext'][static::class] = true;
         PhaseContainer::_()->addPublicClasses([static::class => true]);
+    }
+    protected function needMoveDateJsonFile()
+    {
+        $cmd =  $_SERVER['argv'][1]  ?? '';
+        if (PHP_SAPI !=='cli'){
+            return true; //@codeCoverageIgnore
+        } else if (PHP_SAPI ==='cli' && $cmd ==='duckcover') {
+            return true;
+        }
+        return false;
+    }
+    protected function moveDateJsonFile()
+    {
+        App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
+        App::_()->options['data_file_enable'] = true;
     }
     public function init(array $options, ?object $context = null)
     {
