@@ -12,7 +12,7 @@
 |---|---|
 | PHP | >= 7.4 |
 | 覆盖率驱动 | 已加载 **Xdebug** 或 **PCOV**（`php -m` 里能看到其一） |
-| 框架 | DuckPHP >= 1.4.1（内置 `DuckPhp\HttpServer\HttpServer`） |
+| 框架 | DuckPHP >= 1.4.1 |
 
 ---
 
@@ -43,28 +43,17 @@ class DemoApp extends DuckPhp
         'duckcoverage_enable' => true,
 
         'duckcoverage_callback'=> [TestLister::class ,'GetTestList'],
-        'duckcoverage_report_direct' => false,
-        'duckcoverage_web_base_url' => 'http://www.***.com/',
+        //'duckcoverage_report_direct' => false,
+        //'duckcoverage_web_base_url' => 'http://www.***.com/',
 
     ];
     protected function onPrepare(): void
     {
         parent::onPrepare();
         if (class_exsits(DuckCoverage::class)) {
-            DuckCoverage::Prepare();
+            DuckCoverage::Prepare([]);
         }
     }
-    public function serve(): bool
-    {
-        if (!class_exsits(DuckCoverage::class)) {
-            return parent::serve();
-        }
-        DuckCoverage::BeforeRun();
-        $flag = $parent::serve();
-        DuckCoverage::AfterRun();
-        return $flag;
-    }
-}
 ```
 
 ```php
@@ -73,14 +62,13 @@ namespace DuckAdminDemo\System;
 
 class TestLister
 {
-
     public static function GetTestList()
     {
         return <<<EOT
 WEB /admin/index
 WEB /admin/login username=admin&password=123456
-CMD php cli.php admin/clean
-CALL MyApp/Test/Tester@doSomething
+CMD mycommand anything.
+CALL MyApp\Test\Tester@doSomething
 EOT;
     }
 }
@@ -120,7 +108,7 @@ php cli.php duckcover
 |---|---|---|
 | `WEB` | `WEB /admin/index` | 回放一个 Web 请求；第二段是 POST 参数（`a=1&b=2`），第三段可写 `AJAX` 或 `OPTIONS` |
 | `CMD` | `CMD callme admin/clean` | 原样执行 shell 命令 |
-| `CALL` | `CALL Foo/Bar@run x=1` | 直接调用本地类/函数 |
+| `CALL` | `CALL Foo\Bar@run x=1` | 直接调用本地类/函数 |
 | `SETWEB` | `SETWEB _ _ _ _` | 给后续 `#WEB` 设置钩子，依次为 `pre_curl pre_webcall post_webcall post_curl`，`_` 表示清除 |
 | `PHASE` | `PHASE api` | 切换 DuckPHP phase |
 ---
@@ -140,7 +128,7 @@ php cli.php duckcover
         'duckcoverage_report_direct' => false,
 
         'duckcoverage_web_base_url' => '',
-        // 外部服务器(如 nginx)基础 URL,如 http://admin.duckphp-local.com/ ;空则退回内部测试服务器
+        // 外部服务器(如 nginx)基础 URL,如 http://www.example.com/ ;空则退回内部测试服务器
         'duckcoverage_server_port' => 8017,
         'duckcoverage_server_host' => '',
         'duckcoverage_path_server' => '',
@@ -158,12 +146,11 @@ php cli.php duckcover
 不想用内置测试服务器时，配置外部服务器地址：
 
 ```php
-'duckcoverage_web_base_url' => 'http://admin.duckphp-local.com/',
+'duckcoverage_web_base_url' => 'http://www.example.com/',
 ```
 
-- 之后 `#WEB /admin/index` 会请求 `http://admin.duckphp-local.com/admin/index`。
-- 外部服务器必须能接收并转发 `X-MyCoverage-Name` 请求头（nginx 默认透传自定义头，无需额外配置）。
-- 仍需要先 `--watch` 同一组名，保证 `isInHttpTest()` 命中。
+- 之后 `#WEB /admin/index` 会请求 `http://www.example.com/admin/index`。
+
 
 ---
 
@@ -192,7 +179,7 @@ php cli.php duckcover
 
 ---
 
-## 10. 相关链接
+## 8. 相关链接
 
 - 项目主页：<https://github.com/dvaknheo/duckcoverage>
 - DuckPHP：<https://github.com/dvaknheo/duckphp>

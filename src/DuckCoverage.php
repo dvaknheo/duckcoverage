@@ -88,10 +88,10 @@ class DuckCoverage extends ComponentBase
     protected function needMoveDateJsonFile()
     {
         $cmd =  $_SERVER['argv'][1]  ?? '';
-        if (PHP_SAPI !== 'cli') {
-            return true; //@codeCoverageIgnore
+        if (PHP_SAPI !== 'cli' ) {
+            return $this->checkHttp();
         } else if (PHP_SAPI === 'cli' && $cmd === 'duckcover') {
-            return true;
+            return true; //todo duckcover 太固定死了
         }
         return false;
     }
