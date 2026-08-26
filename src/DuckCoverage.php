@@ -10,23 +10,22 @@ use DuckPhp\Core\App;
 use DuckPhp\Core\ComponentBase;
 use DuckPhp\Core\Console;
 use DuckPhp\Core\PhaseContainer;
-use DuckPhp\Core\SystemWrapper;
+use DuckPhp\Core\Route;
 use DuckPhp\Core\SuperGlobal;
 use DuckPhp\HttpServer\HttpServer;
 use LibCoverage\GroupCoverage;
 
 class DuckCoverage extends ComponentBase
 {
-    use CommandTrait;
-    use HttpServerTrait;
-    use HttpClientTrait;
+    use DuckCoverage_CommandTrait;
+    use DuckCoverage_HttpServerTrait;
+    use DuckCoverage_HttpClientTrait;
 
     //todo use  global singletonex to replace default singleton function
     public $options = [
         'duckcoverage_enable' => true,
         'duckcoverage_data_file_json_file'=> 'DuckPhpData-duckcoverage.config.json',
         'duckcoverage_reg_console_command' => true,
-        'duckcoverage_reg_web_request' => false,
         'duckcoverage_callback' => null,
 
         'duckcoverage_path' => '',
@@ -64,14 +63,27 @@ class DuckCoverage extends ComponentBase
     {
         return DuckCoverage::_()->_OnAfterRun();
     }
-    public function beforeInit()
+    public static function Prepare($options = [])
     {
-        // 我们还要检查有没有开启调试模式，有没有 drvier 。 不需要在 Ext 里加后续 Init;，自己加
-        // 有没有在 root;
-        if(App::_()->options['duckcoverage_enable']) {
+        return DuckCoverage::_()->beforeInit($options);
+    }
+    public function beforeInit($options = [])
+    {
+        if(!App::_()->options['duckcoverage_enable']) {
+            return ;
+        }
+        if (!App::_()->isRoot()) {
+            return;
+        }
+        $cmd =  $_SERVER['argv'][1]  ?? '';
+        if (PHP_SAPI !=='cli'){
+            App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
+            App::_()->options['data_file_enable'] = true;
+        }else if (PHP_SAPI ==='cli' && $cmd ==='duckcover') {
             App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
             App::_()->options['data_file_enable'] = true;
         }
+    
         App::_()->options['ext'][static::class] = true;
         PhaseContainer::_()->addPublicClasses([static::class => true]);
     }
@@ -87,13 +99,12 @@ class DuckCoverage extends ComponentBase
         $path_project = App::_()->getProjectPath();
         $path_runtime = App::_()->getRuntimePath();
 
-        $this->options['duckcoverage_path'] = $path_runtime .'DuckCoverage/';
+        $this->options['duckcoverage_path'] = $path_runtime .'DuckCoverage/';  //TODO
         $this->options['duckcoverage_path_server'] =  $this->options['duckcoverage_path_server'] ?
         $this->options['duckcoverage_path_server'] : $path_project;
 
         $is_abs = preg_match('/^(?:[A-Za-z]:[\/\\\\]|[\/\\\\]{2,}|[\/\\\\])/',$this->options['duckcoverage_path_src'] ?? '') > 0;
-        $this->current_path_src = $is_abs ? $this->options['duckcoverage_path_src'] : $path_project;
-        
+        $this->current_path_src = $is_abs ? $this->options['duckcoverage_path_src'] : $path_project.$this->options['duckcoverage_path_src'];
         $this->current_path_dump = $this->options['duckcoverage_path'];
 
         @mkdir($this->options['duckcoverage_path']);
@@ -101,6 +112,9 @@ class DuckCoverage extends ComponentBase
         if ($this->options['duckcoverage_reg_console_command']) {
             App::_()->regConsoleCommand(static::class, 'command_');
         }
+        Route::_()->addRouteHook([static::class,'BeforeRun'], 'prepend-outter');
+        Route::_()->addRouteHook([static::class,'AfterRun'], 'finally-outter');
+
         return $this;
     }
     protected function checkHttp()
@@ -125,9 +139,8 @@ class DuckCoverage extends ComponentBase
         if (!$this->checkHttp()) {
             return;
         }
-        //ExitException::Init();
         $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');
-        $this->doBegin($this->current_name, $this->current_group, $this->current_path_src, $this->current_path_dump);
+        $this->doBegin();
     }
     protected function call_http_handler($name)
     {
@@ -157,17 +170,7 @@ class DuckCoverage extends ComponentBase
 
         $this->current_group = $this->watchingGetName();
         foreach ($test_list as $line) {
-            $str = (new \DateTime())->format('Y-m-d_H_i_s.v');
-            $name = "[{$this->current_group} $str]".$line;
-            $this->current_name = $name;
-            $this->doBegin(
-                $this->current_name,
-                $this->current_group,
-                $this->current_path_src,
-                $this->current_path_dump
-            );
-            $this->readCommand($line);   // @codeCoverageIgnore
-            $this->doEnd();              // @codeCoverageIgnore
+            $this->readCommand($line);
         }
         $this->stopServer();
     }
@@ -276,9 +279,9 @@ EOT;
     {
         return GroupCoverage::_();
     }
-    public function doBegin($name, $group, $path_src, $path_dump)
+    public function doBegin()
     {
-        $this->getRunner()->doBegin($name, $group, $path_src, $path_dump);
+        $this->getRunner()->doBegin($this->current_name, $this->current_group, $this->current_path_src, $this->current_path_dump);
     }
     public function doEnd()
     {
@@ -290,13 +293,15 @@ EOT;
     }
     ////]]]]
 }
-trait CommandTrait
+trait DuckCoverage_CommandTrait
 {
     protected function readCommand($request)
     {
         $request = ltrim($request);
         $flag = preg_match('/^(\S+)\s+(.*)/',$request,$m);
         if ($flag) {
+            $this->current_name = "[{$this->current_group} ".(new \DateTime())->format('Y-m-d_H_i_s.v')."]".$request;
+
             $call = ucfirst(strtolower($m[1]));
             $method = "explain".$call;
             if (is_callable([$this, $method])) {
@@ -304,12 +309,14 @@ trait CommandTrait
             }else{
                 echo "Bad Request: $request\n";
             }
-            echo $request;
+            echo $request; echo "\n";
         }
     }
     public function explainPhase(string $param)
     {
+        $this->doBegin();
         App::Phase($param);
+        $this->doEnd();
     }
     protected function explainWeb(string $param)
     {
@@ -330,18 +337,17 @@ trait CommandTrait
 
         $url = rtrim($base_url,'/') . $uri;
 
-        //$this->doEnd();
-        $old_name =  $this->current_name;
-        $this->current_name = "retmote-".$this->current_name;
         $data = $this->curl_file_get_contents($url, $post, $is_ajax, $is_options, $method);
-        $this->current_name  = $old_name;
+
         if ($this->options['duckcoverage_debug_curl_echo_back'] ?? false) {
             echo substr($data, 0, 200);
         }
     }
     protected function explainCall(string $param)
     {
+        $this->doBegin();
         $this->callHandler($param);
+        $this->doEnd();
     }
     protected function explainSetweb(string $param)
     {
@@ -354,13 +360,19 @@ trait CommandTrait
     }
     protected function explainRun(string $param)
     {
+        $this->doBegin();
         $argv = $this->shell_parse($param);
+
         array_unshift($argv,'-');
         $__SERVER = $_SERVER;
     
         $_SERVER['argv'] = $argv;
+
         App::_()->execute();
+
         $_SERVER = $__SERVER;
+
+        $this->doEnd();
     }
     ////////////////////////////////////////////////////////////////////////////
     protected function callHandler($handler, $ext_args = [])
@@ -385,7 +397,7 @@ trait CommandTrait
         if ($poststr) {
             parse_str($poststr, $input);
         }
-        $object = null;
+        $reflect = null;
         if (!$function) {
             if ($type === '@') {
                 $object = $class::_();
@@ -394,7 +406,6 @@ trait CommandTrait
                 $object = new $class;
                 $reflect = new \ReflectionMethod($object, $method);
             } else if ($type === '::') {
-                $object = null;//$class;
                 $reflect = new \ReflectionMethod($class, $method);
             }
             
@@ -420,7 +431,7 @@ trait CommandTrait
         }
         return $ret;
     }
-    function shell_parse(string $str): array
+    public function shell_parse(string $str): array
     {
         $result = [];
         $buffer = '';
@@ -480,7 +491,7 @@ trait CommandTrait
     }
 
 }
-trait HttpServerTrait
+trait DuckCoverage_HttpServerTrait
 {
     protected $is_server_started = false;
 
@@ -516,7 +527,7 @@ trait HttpServerTrait
         $this->is_server_started = false;
     }
 }
-trait HttpClientTrait
+trait DuckCoverage_HttpClientTrait
 {
     protected $cookies = [];
     protected $post = [];

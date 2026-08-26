@@ -197,9 +197,8 @@ class DuckCoverageApp extends DuckPhp
     }
     protected function onPrepare(): void
     {
-        DuckCoverage::_()->beforeInit(); //mover  json data ;
+        DuckCoverage::Prepare();
         parent::onPrepare();
-        // something from setting;
     }
     public function serve(): bool
     {
