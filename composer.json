@@ -32,16 +32,13 @@
             "options": {
                 "symlink": true
             }
-        },
-        {
-            "type": "path",
-            "url": "../libcoverage",
-            "options": {
-                "symlink": true
-            }
         }
     ],
     "require-dev": {
-        "phpunit/phpunit": "^9.6.36"
+        "phpunit/php-code-coverage": "^9.2.32",
+        "friendsofphp/php-cs-fixer": "*",
+        "phpstan/phpstan": "*",
+        "phpstan/phpstan-phpunit": "*",
+        "phpunit/phpunit":"*"
     }
 }
