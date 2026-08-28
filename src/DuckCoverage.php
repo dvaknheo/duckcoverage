@@ -23,7 +23,6 @@ class DuckCoverage extends ComponentBase
     use DuckCoverage_HttpServerTrait;
     use DuckCoverage_HttpClientTrait;
 
-    //todo use  global singletonex to replace default singleton function
     public $options = [
         'duckcoverage_enable' => true,
         'duckcoverage_data_file_json_file' => 'DuckPhpData-duckcoverage.config.json',
@@ -51,7 +50,9 @@ class DuckCoverage extends ComponentBase
     protected $current_path_src;
     protected $current_path_dump;
 
-
+    protected $default_cmd ='duckcover';
+    protected $default_report_dir = 'AAAAA.report';
+    protected $default_path = 'DuckCoverage/';
     public function __construct()
     {
         $this->options = array_replace_recursive($this->options, (new parent())->options); //merge parent's options;
@@ -87,11 +88,11 @@ class DuckCoverage extends ComponentBase
     }
     protected function needMoveDateJsonFile()
     {
-        $cmd =  $_SERVER['argv'][1]  ?? '';
+        $cmd = $_SERVER['argv'][1] ?? '';
         if (!App::_()->isCli()) {
             return $this->checkHttp(); //@codeCoverageIgnore
-        } else if ($cmd === 'duckcover') {
-            return true; //todo duckcover 太固定死了
+        } else if ($cmd === $this->default_cmd) {
+            return true;
         }
         return false;
     }
@@ -112,11 +113,11 @@ class DuckCoverage extends ComponentBase
         $path_project = App::_()->getProjectPath();
         $path_runtime = App::_()->getRuntimePath();
 
-        $this->options['duckcoverage_path'] = $path_runtime . 'DuckCoverage/';  //TODO
-        $this->options['duckcoverage_path_server'] =  $this->options['duckcoverage_path_server'] ?
+        $this->options['duckcoverage_path'] = $path_runtime . $this->default_path;
+        $this->options['duckcoverage_path_server'] = $this->options['duckcoverage_path_server'] ?
             $this->options['duckcoverage_path_server'] : $path_project;
 
-        $is_abs = preg_match('/^(?:[A-Za-z]:[\/\\\\]|[\/\\\\]{2,}|[\/\\\\])/', $this->options['duckcoverage_path_src'] ?? '') > 0;
+        $is_abs = preg_match('#^(?:/|[a-zA-Z]:[\\\\/]|\\\\{2})#', $this->options['duckcoverage_path_src'] ?? '') > 0;
         $this->current_path_src = $is_abs ? $this->options['duckcoverage_path_src'] : $path_project . $this->options['duckcoverage_path_src'];
         $this->current_path_dump = $this->options['duckcoverage_path'];
 
@@ -140,7 +141,7 @@ class DuckCoverage extends ComponentBase
         $server_ip = SuperGlobal::_()->_SERVER('SERVER_ADDR', '');
         $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
         $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
-        if (($server_ip !== '127.0.0.1') || ($client_ip != $server_ip)  || !$name || !$group) {
+        if (($server_ip !== '127.0.0.1') || ($client_ip != $server_ip) || !$name || !$group) {
             return false;
         }
         $this->current_name = $name;
@@ -254,7 +255,7 @@ EOT;
         if (count($groups) === 1 && !$this->options['duckcoverage_report_direct']) {
             $path_report = $path_report . $groups[0] . '.report';
         } else {
-            $path_report = $path_report . 'AAAAA.report';
+            $path_report = $path_report . $this->default_report_dir;
         }
         $this->createReport($groups, $this->current_path_src, $this->current_path_dump, $path_report);
         $time_end = microtime(true);
@@ -638,8 +639,8 @@ trait DuckCoverage_HttpClientTrait
         $this->headers = [];
         // 收集响应中的所有 Set-Cookie，同名覆盖（空值/deleted 移除）
         $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        $headers = substr((string)$data, 0, $header_size);
-        $data = substr((string)$data, $header_size);
+        $headers = substr((string) $data, 0, $header_size);
+        $data = substr((string) $data, $header_size);
         if (preg_match_all('/Set-Cookie:\s*([^=;\s]+)=([^;]*)/i', $headers, $ms)) {
             foreach ($ms[1] as $i => $name) {
                 $value = trim($ms[2][$i]);
