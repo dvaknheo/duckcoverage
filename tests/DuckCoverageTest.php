@@ -23,7 +23,7 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         include $path.'src/MyDuckCoverageApp.php';
         $options = [
             'path'=>$path,
-            'duckcoverage_callback' =>[DuckCoverageTestList::class,'GetTestList']
+            'duckcoverage_test_lister' =>[DuckCoverageTestList::class,'GetTestList']
         ];
         //DuckCoverageApp::_(\MyDuckCoverageApp::_())->init($options);
         DuckCoverageApp::_()->init($options);

@@ -27,7 +27,7 @@ class DuckCoverage extends ComponentBase
         'duckcoverage_enable' => true,
         'duckcoverage_data_file_json_file' => 'DuckPhpData-duckcoverage.config.json',
         'duckcoverage_reg_console_command' => true,
-        'duckcoverage_callback' => null,
+        'duckcoverage_test_lister' => null,
 
         'duckcoverage_path' => '',
         'duckcoverage_path_src' => 'src/', // 需要
@@ -178,7 +178,7 @@ class DuckCoverage extends ComponentBase
     protected function replay()
     {
         $this->cleanClientStatus();
-        $callback = $this->options['duckcoverage_callback'] ?? null;
+        $callback = $this->options['duckcoverage_test_lister'] ?? null;
         $test_list = $callback();
         $test_list = \explode("\n", $test_list);
 
