@@ -13,6 +13,7 @@ use DuckPhp\Core\EventManager;
 use DuckPhp\Core\Route;
 use DuckPhp\Foundation\Helper;
 
+//@codeCoverageIgnoreStart
 class TestFileCreator extends ComponentBase
 {
     public $options =[
@@ -348,4 +349,4 @@ class TestFileCreator extends ComponentBase
         }
         return '';
     }
-}
+}//@codeCoverageIgnoreEnd
