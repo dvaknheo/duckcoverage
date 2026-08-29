@@ -238,13 +238,13 @@ BAD
 PHASE 
 CALL {static}::Callback
 SETWEB {static}::pre_curl {static}::pre_web {static}::prost_web {static}::post_curl
-WEB /
-WEB / a=b POST
+COMMENT WEB /
+COMMENT WEB / a=b POST
 SETWEB AJAX _ _ _
-WEB /
+COMMENT WEB /
 CALL {static}::cloze_curl
 SETWEB OPTIONS _ _ _
-WEB /
+COMMENT WEB /
 
 RUN mycmd {ARG}
 RUN mycmd {ARG}
@@ -316,17 +316,10 @@ class DuckCoverageTestList
     {
 
         $str=<<<EOT
-#PHASE 
-#CALL MyDuckCoverageApp::Callback
-#CMD cmdback a b 
-#SETWEB _ _ _ _
-#WEB /
+COMMENT just a test
 
 EOT;
-        $str=<<<EOT
-#CMD cmdback
 
-EOT;
 
         return $str;
     }

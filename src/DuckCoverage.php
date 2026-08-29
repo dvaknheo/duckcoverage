@@ -1,6 +1,4 @@
-<?php
-
-declare(strict_types=1);
+<?php declare(strict_types=1);
 /**
  * DuckPhp
  * From this time, you never be alone~
@@ -8,6 +6,7 @@ declare(strict_types=1);
 
 namespace DuckCoverage;
 
+use DuckCoverage\TestListerHelper;
 use DuckPhp\Core\App;
 use DuckPhp\Core\ComponentBase;
 use DuckPhp\Core\Console;
@@ -174,14 +173,39 @@ class DuckCoverage extends ComponentBase
         $this->doEnd();
         //@codeCoverageIgnoreEnd
     }
+    public function getTestListerText()
+    {
+        $callback = $this->options['duckcoverage_test_lister'] ?? null;
+        $test_list = $callback();
+        $test_list = $this->explainMarco($test_list);
+        return $test_list;
+    }
+    public function listForAllRoute()
+    {
+        return TestListerHelper::_()->listForAllRoute();
+    }
+    public function listForAllCommand()
+    {
+        return TestListerHelper::_()->listForAllCommand();
+    }
+    public function listForAllBusiness()
+    {
+        return TestListerHelper::_()->listForAllBusiness();
+    }
+    public function listForAllModel()
+    {
+        return TestListerHelper::_()->listForAllModel();
+    }
+    public function explainMarco($test_list)
+    {
+        return TestListerHelper::_()->explainMarco($test_list);
+    }
     //////////////////
     protected function replay()
     {
-        $this->cleanClientStatus();
-        $callback = $this->options['duckcoverage_test_lister'] ?? null;
-        $test_list = $callback();
+        $this->cleanClientStatus();   
+        $test_list = $this->getTestListerText();
         $test_list = \explode("\n", $test_list);
-
         $this->current_group = $this->watchingGetName();
         foreach ($test_list as $line) {
             $this->readCommand($line);
@@ -195,6 +219,10 @@ class DuckCoverage extends ComponentBase
     {
         @mkdir($this->current_path_dump);
         $p = Console::_()->getCliParameters();
+        $this->doCommand($p);
+    }
+    public function doCommand($p)
+    {
         if ($p['help'] ?? false || count($p) === 1) {
             $str = <<<EOT
 --watch {group}
@@ -310,35 +338,34 @@ trait DuckCoverage_CommandTrait
 {
     protected function readCommand($request)
     {
-        $request = ltrim($request);
-        $flag = preg_match('/^(\S+)\s+(.*)/', $request, $m);
-        if ($flag) {
-            $this->current_name = "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
-
-            $call = ucfirst(strtolower($m[1]));
-            $method = "explain" . $call;
-            if (is_callable([$this, $method])) {
-                \call_user_func([$this, $method], \rtrim($m[2]), $request);
-            } else {
-                echo "Bad Request: $request\n";
-            }
-            echo $request;
-            echo "\n";
+        $argv = explode(" ",$request);       
+        $this->current_name = "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
+        $cmd = array_shift($argv);
+        $call = ucfirst(strtolower($cmd));
+        $method = "explain" . $call;
+        if (is_callable([$this, $method])) {
+            \call_user_func([$this, $method], $argv);
+        } else {
+            echo "Bad Request: $request\n";
         }
+        echo $request;
+        echo "\n";
     }
-    public function explainComment(string $param)
+    public function explainComment(array $argv)
     {
         //do nothing.
     }
-    public function explainPhase(string $param)
+    public function explainPhase(array $argv)
     {
+        $param = $argv[0];
         $this->doBegin();
         App::Phase($param);
         $this->doEnd();
     }
-    protected function explainWeb(string $param)
+    protected function explainWeb(array $argv)
     {
-        @list($uri, $poststr, $method) = explode(' ', $param);
+        @list($uri, $poststr, $method) = $argv;
+        $uri = __url($uri);
 
         $base_url = (string) ($this->options['duckcoverage_web_base_url'] ?? '');
         if ($base_url === '') {
@@ -361,54 +388,87 @@ trait DuckCoverage_CommandTrait
             echo substr($data, 0, 200);
         }
     }
-    protected function explainCall(string $param)
+    protected function explainCall(array $argv)
     {
         $this->doBegin();
-        $this->callHandler($param);
+        $this->callHandler(implode(" ", $argv));
         $this->doEnd();
     }
-    protected function explainSetweb(string $param)
+    protected function explainSetweb(array $argv)
     {
-        @list($pre_curl, $pre_webcall, $post_webcall, $post_curl) = explode(' ', trim($param));
+        @list($pre_curl, $pre_webcall, $post_webcall, $post_curl) = $argv;
         $this->pre_curl = ($pre_curl === '_') ? null : $pre_curl;
         $this->pre_webcall = ($pre_webcall === '_') ? null : $pre_webcall;
         $this->post_webcall = ($post_webcall === '_') ? null : $post_webcall;
         $this->post_curl = ($post_curl === '_') ? null : $post_curl;
         return;
     }
-    protected function explainRun(string $param)
+    protected function explainRun(array $argv)
     {
-        $this->doBegin();
-        $argv = $this->shell_parse($param);
+        $sub_cmd = array_shift($argv);
+        $pos = strpos($sub_cmd, ":");
+        if(false === $pos){
+            $sub_cmd = App::_()->getThisCommandPrefix() . $sub_cmd;
+        }   else if(0 === $pos) {
+            $sub_cmd = substr($sub_cmd, 1);
+        }
+        $str = implode(" ", $argv);
 
-        array_unshift($argv, '-');
+        $new_argv = $this->shell_parse($str);
+
+        array_unshift($new_argv, $sub_cmd);
+        array_unshift($new_argv, '-');
+
+        $this->doBegin();
         $__SERVER = $_SERVER;
 
-        $_SERVER['argv'] = $argv;
-
+        $_SERVER['argv'] = $new_argv;
         App::_()->execute();
-
         $_SERVER = $__SERVER;
 
         $this->doEnd();
     }
     ////////////////////////////////////////////////////////////////////////////
-    protected function callHandler($handler, $ext_args = [])
+    public function callHandler($handler, $ext_args = [])
     {
-        if (!isset($handler)) {
+        if(!$handler){
             return;
         }
-        //$handler = "DuckAdmin\\Test\\Tester@_justTest parameter=d";
-        $flag = preg_match('/^(([a-zA-Z0-9_\x7f-\xff\\\\]+)(\:\:|\@|\->)([a-zA-Z0-9_\x7f-\xff]+)|([a-zA-Z0-9_\x7f-\xff]+))( (\S*))?$/', $handler, $m);
-        if (!$flag) {
+        @list($handler,$parameters) = explode(' ', $handler);
+        $phase = null;
+        if (($pos = strpos($handler, '!')) !== false) {
+            $domain = substr($handler, 0, $pos + 1);
+            $handler = substr($handler, $pos + 1);
+        }
+        
+        // 解析调用方式
+        if (preg_match('/^(.+?)(::|@|->)(.+)$/', $handler, $m)) {
+            // 类方法调用
+            $class = $m[1];
+            $type = $m[2];
+            $method = $m[3];
+            $function = null;
+        } elseif (preg_match('/^\w+$/', $handler)) {
+            // 函数调用
+            $class = null;
+            $type = null;
+            $method = null;
+            $function = $handler;
+        } else {
             return false;
         }
-        @list($_0, $_1, $class, $type, $method, $function, $_6, $parameters) = $m;
-        return $this->callObject($class, $method, $type, $function, $parameters, $ext_args);
+        if ($phase!== null){
+            $last_phase = App::Phase($phase);
+        }
+        $ret = $this->callObject($class, $method, $type, $function, $parameters, $ext_args);
+        if ($phase!== null){
+            App::Phase($last_phase);
+        }
+        return $ret;
     }
     /**
      */
-    public function callObject($class, $method, $type, $function, $poststr, $args = [])
+    protected function callObject($class, $method, $type, $function, $poststr, $args = [])
     {
         $input = [];
 
