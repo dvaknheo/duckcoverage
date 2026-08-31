@@ -338,6 +338,9 @@ trait DuckCoverage_CommandTrait
 {
     protected function readCommand($request)
     {
+        if (empty($request)) {
+            return;
+        }
         $argv = explode(" ",$request);       
         $this->current_name = "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
         $cmd = array_shift($argv);
@@ -591,7 +594,7 @@ trait DuckCoverage_HttpServerTrait
         }
         HttpServer::RunQuickly($server_options);
 
-        //sleep(1);// ugly
+        usleep(500);
         echo static::class . " HTTP SERVER PID = " . HttpServer::_()->getPid() . "\n";
         $this->is_server_started = true;
     }
@@ -695,7 +698,13 @@ trait DuckCoverage_HttpClientTrait
 
         $this->prepareCurl($ch);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
+
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
         $data = curl_exec($ch);
+        if(curl_errno($ch) === CURLE_OPERATION_TIMEDOUT){
+            echo "timeout!!";
+        }
+
         $this->headers = [];
         // 收集响应中的所有 Set-Cookie，同名覆盖（空值/deleted 移除）
         $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);

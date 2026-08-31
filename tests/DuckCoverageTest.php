@@ -23,7 +23,8 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         include $path.'src/MyDuckCoverageApp.php';
         $options = [
             'path'=>$path,
-            'duckcoverage_test_lister' =>[DuckCoverageTestList::class,'GetTestList']
+            'duckcoverage_test_lister' =>[DuckCoverageTestList::class,'GetTestList'],
+            'duckcoverage_path_server' =>$path,
         ];
         //DuckCoverageApp::_(\MyDuckCoverageApp::_())->init($options);
         DuckCoverageApp::_()->init($options);
@@ -44,7 +45,7 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         DuckCoverageApp::_()->testMore();
 
         /////////////
-        DuckCoverageApp::_(new DuckCoverageApp)->init($options);
+        //DuckCoverageApp::_(new DuckCoverageApp)->init($options);
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
         $_SERVER['SERVER_ADDR'] = '127.0.0.1';
         $_SERVER['HTTP_X_MYCOVERAGE_GROUP'] = 'group1';
@@ -54,9 +55,9 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         
         $_SERVER['REQUEST_URI'] ='/';
         $_SERVER['PATH_INFO'] ='';
-        DuckCoverageApp::_()->serve();
+        //DuckCoverageApp::_()->serve();
 
-        $__SERVER = $_SERVER;
+        $_SERVER = $__SERVER;
         LibCoverage::_($old);
         LibCoverage::_()->cleanDirectory($path);
         LibCoverage::End();
@@ -237,14 +238,9 @@ COMMENT just a test
 BAD 
 PHASE 
 CALL {static}::Callback
-SETWEB {static}::pre_curl {static}::pre_web {static}::prost_web {static}::post_curl
-COMMENT WEB /
-COMMENT WEB / a=b POST
-SETWEB AJAX _ _ _
-COMMENT WEB /
 CALL {static}::cloze_curl
 SETWEB OPTIONS _ _ _
-COMMENT WEB /
+
 
 RUN mycmd {ARG}
 RUN mycmd {ARG}
@@ -253,12 +249,25 @@ RUN mycmd {ARG}
 RUN mycmd {ARG}
 RUN mycmd {ARG}
 RUN mycmd {ARG}
+RUN mycmd {ARG}
+RUN :mycmd
 
 CALL @bad
+CALL !is_string value=ok
 CALL is_string value=ok
 CALL {static}->func name=n1
 CALL {static}@func name=n2
 CALL {static}@func
+
+EOT;
+
+        $str .= <<<EOT
+WEB /
+SETWEB {static}::pre_curl {static}::pre_web {static}::prost_web {static}::post_curl
+WEB /
+WEB / a=b POST
+SETWEB AJAX _ _ _
+WEB /
 
 EOT;
 
@@ -279,10 +288,13 @@ TESTCASES;
         $str = str_replace('{static}',static::class,$str);
         $str = str_replace('{cliprefix}',$this->getThisCommandPrefix(),$str);
         $cmds = explode("\n",$str);
+global $time_start;var_dump(microtime(true)-$time_start);
         DuckCoverageEx::_()->stop =true;
         foreach($cmds as $cmd){
             DuckCoverageEx::_()->readCommand($cmd);
         }
+global $time_start;var_dump(microtime(true)-$time_start);
+        return;
         DuckCoverageEx::_()->testRunServer();
 
 
