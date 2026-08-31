@@ -440,8 +440,8 @@ trait DuckCoverage_CommandTrait
         @list($handler,$parameters) = explode(' ', $handler);
         $phase = null;
         if (($pos = strpos($handler, '!')) !== false) {
-            $domain = substr($handler, 0, $pos + 1);
-            $handler = substr($handler, $pos + 1);
+            $phase = (string)substr($handler, 0, $pos + 1);
+            $handler = (string)substr($handler, $pos + 1);
         }
         
         // 解析调用方式
@@ -696,13 +696,14 @@ trait DuckCoverage_HttpClientTrait
             curl_setopt($ch, CURLOPT_COOKIE, implode('; ', $cookie_str));
         }
 
-        $this->prepareCurl($ch);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
-
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
         curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        $this->prepareCurl($ch);
         $data = curl_exec($ch);
         if(curl_errno($ch) === CURLE_OPERATION_TIMEDOUT){
-            echo "timeout!!";
+            echo "curl_file_get_contents timeout";
+            return false;
         }
 
         $this->headers = [];
@@ -725,7 +726,7 @@ trait DuckCoverage_HttpClientTrait
         echo ' ';
         echo http_build_query($post);
         echo "\n";
-        //echo $data;
+        echo $data;
         curl_close($ch);
         $data = ($data !== false) ? $data : '';
         return $data;

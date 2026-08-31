@@ -27,6 +27,8 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
             'duckcoverage_path_server' =>$path,
         ];
         //DuckCoverageApp::_(\MyDuckCoverageApp::_())->init($options);
+        var_dump($_SERVER['argv']);
+        $_SERVER['argv'] = ['-','duckcover'];
         DuckCoverageApp::_()->init($options);
 
         $this->cmd("duckcover --help");
@@ -45,7 +47,8 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         DuckCoverageApp::_()->testMore();
 
         /////////////
-        //DuckCoverageApp::_(new DuckCoverageApp)->init($options);
+        $_SERVER['argv'] = $__SERVER['argv'];
+        DuckCoverageApp::_(new DuckCoverageApp)->init($options);
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
         $_SERVER['SERVER_ADDR'] = '127.0.0.1';
         $_SERVER['HTTP_X_MYCOVERAGE_GROUP'] = 'group1';
@@ -55,7 +58,9 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         
         $_SERVER['REQUEST_URI'] ='/';
         $_SERVER['PATH_INFO'] ='';
-        //DuckCoverageApp::_()->serve();
+        DuckCoverageApp::_()->serve();
+
+        DuckCoverageApp::_()->testLists();
 
         $_SERVER = $__SERVER;
         LibCoverage::_($old);
@@ -101,6 +106,12 @@ EOT;
         file_put_contents($path.'src/MyDuckCoverageApp.php',"<"."?php declare(strict_types=1);\n".$str);
         $str = <<<'EOT'
 setcookie('CK'.DATE('His'),DATE('Y-m-d H:i:s'));
+if($_GET['sleep']??null){
+echo "sleep";
+sleep(8);
+}else{
+echo "OK";
+}
 var_dump(DATE(DATE_ATOM));
 EOT;
 'EOT';
@@ -140,30 +151,39 @@ class DuckCoverageEx extends DuckCoverage
     }
     public  function cloze_curl()
     {
-        $this->curl_file_get_contents(['http://127.0.0.1:8017/',"ai.local.com"]);
+        $this->curl_file_get_contents(['http://ai.local.com/?sleep=1',"127.0.0.1:8017"]);
     }
 
 }
 class DuckCoverageApp extends DuckPhp
 {
+    public function testLists()
+    {
+        $str = DuckCoverage::_()->listForAllRoute();
+        $str = DuckCoverage::_()->listForAllCommand();
+        $str = DuckCoverage::_()->listForAllBusiness();
+        $str = DuckCoverage::_()->listForAllModel();     
+    }
+
     public function command_mycmd()
     {
-        var_dump("CALLED");
+        //$this->assertTrue(true);
         $data = Console::_()->getCliParameters();
-        var_dump($data);
+        //var_dump($data);
     }
 
     public static function beforerun()
     {
-        var_dump(DATE(DATE_ATOM));
+        //$this->assertTrue(true);
+        
     }
     public static function afterrun()
     {
-        var_dump(DATE(DATE_ATOM));
+        //$this->assertTrue(true);
     }
     public static function pre_curl($ch,$name)
     {
-        var_dump($name);
+        //$this->assertTrue(true);
     }
     public static function post_curl($ch,$name)
     {
@@ -171,15 +191,15 @@ class DuckCoverageApp extends DuckPhp
     }
     public static function pre_web()
     {
-        var_dump(DATE(DATE_ATOM));
+        //$this->assertTrue(true);
     }
     public static function post_web()
     {
-        var_dump(DATE(DATE_ATOM));
+        //$this->assertTrue(true);
     }
     public static function Callback()
     {
-        var_dump(DATE(DATE_ATOM));
+        //$this->assertTrue(true);
         return;
     }
 
@@ -208,8 +228,8 @@ class DuckCoverageApp extends DuckPhp
 
     public function action_index()
     {
-        setcookie('CK'.DATE('His'),DATE('Y-m-d H:i:s'));
-        var_dump(DATE(DATE_ATOM));
+        var_dump(static::class);
+        
     }
     protected function onPrepare(): void
     {
@@ -238,7 +258,6 @@ COMMENT just a test
 BAD 
 PHASE 
 CALL {static}::Callback
-CALL {static}::cloze_curl
 SETWEB OPTIONS _ _ _
 
 
@@ -269,6 +288,10 @@ WEB / a=b POST
 SETWEB AJAX _ _ _
 WEB /
 
+SETWEB {static}::pre_cloze_curl _ _ _
+CALL {static}::cloze_curl
+
+
 EOT;
 
 $testInputs = <<<'TESTCASES'
@@ -288,13 +311,12 @@ TESTCASES;
         $str = str_replace('{static}',static::class,$str);
         $str = str_replace('{cliprefix}',$this->getThisCommandPrefix(),$str);
         $cmds = explode("\n",$str);
-global $time_start;var_dump(microtime(true)-$time_start);
         DuckCoverageEx::_()->stop =true;
         foreach($cmds as $cmd){
             DuckCoverageEx::_()->readCommand($cmd);
-        }
 global $time_start;var_dump(microtime(true)-$time_start);
-        return;
+        }
+
         DuckCoverageEx::_()->testRunServer();
 
 
@@ -311,6 +333,13 @@ global $time_start;var_dump(microtime(true)-$time_start);
         $pos = strpos($subject, $search);
         if ($pos === false) return $subject;
         return substr_replace($subject, $replace, $pos, strlen($search));
+    }
+    public static function pre_cloze_curl($ch,$name)
+    {
+        var_dump(__FUNCTION__);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 1);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 1);
+        var_dump($name);
     }
     public static function cloze_curl()
     {

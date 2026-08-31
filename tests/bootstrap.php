@@ -2,6 +2,8 @@
 require_once __DIR__ . '/../vendor/autoload.php';
 
 ////////
+global $time_start;
+$time_start  = microtime(true);
 $options=[
     'path' => realpath(__DIR__ .'/../').'/',
     //'namespace' => null,
