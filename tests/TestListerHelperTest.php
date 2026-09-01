@@ -29,6 +29,7 @@ EOT;
         ];
         TLApp::_()->init($options);
         TestListerHelper::_()->explainMarco($list);
+        TestListerHelper::_()->explainMarco('');
 
         //TestListerHelper::_()->replaceLineStart($list);
 

@@ -6,9 +6,9 @@
 
 namespace DuckCoverage;
 
+use DuckPhp\Component\RouteLister;
 use DuckPhp\Core\App;
 use DuckPhp\Core\SingletonExTrait;
-use DuckPhp\Component\RouteLister;
 
 class TestListerHelper
 {
@@ -23,27 +23,29 @@ class TestListerHelper
         $list = '';
         $last_phase = App::Phase();
         App::_()->toThisChild($child);
-        $callback  = App::_()->options['duckcoverage_test_lister'];
+        $callback = App::_()->options['duckcoverage_test_lister'];
         if ($callback) {
             $list = ($callback)();
-            $list =  $this->explainMarco($list);
+            $list = $this->explainMarco($list);
         }
         App::Phase($last_phase);
         return $list;
     }
     public function explainMarco($list)
     {
-        if (empty($list)){ return '';}
+        if (empty($list)) {
+            return '';
+        }
         $list = explode("\n", $list);
         $ret = [];
-        foreach($list as $line){
-            if ($line === '#PHASE_BEGIN'){
+        foreach ($list as $line) {
+            if ($line === '#PHASE_BEGIN') {
                 $ret[] = $this->doPhaseBegin();
-            } elseif ($line === '#PHASE_END'){
+            } elseif ($line === '#PHASE_END') {
                 $ret[] = $this->doPhaseEnd();
-            } else if(substr($line,0,strlen('#INCLUDE_CALL '))==='#INCLUDE_CALL '){
+            } elseif (substr($line, 0, strlen('#INCLUDE_CALL ')) === '#INCLUDE_CALL ') {
                 $ret[] = $this->doIncludeCall($line);
-            } else if(substr($line,0,strlen('#INCLUDE_CHILD '))==='#INCLUDE_CHILD '){
+            } elseif (substr($line, 0, strlen('#INCLUDE_CHILD ')) === '#INCLUDE_CHILD ') {
                 $ret[] = $this->doIncludeChild($line);
             } else {
                 $ret[] = $line;
@@ -68,7 +70,7 @@ class TestListerHelper
     }
     protected function doIncludeChild(string $line)
     {
-        [$_default, $child_app] = explode(" ",$line);
+        [$_default, $child_app] = explode(" ", $line);
         return $this->getChildList($child_app);
     }
     // public function replaceLineStart(string $content, array $rules): string
@@ -92,9 +94,9 @@ class TestListerHelper
     //     foreach ($args as $k => $v) {
     //         $a["{".$k."}"] = $v;
     //     }
-        
+
     //     $ret = str_replace(array_keys($a), array_values($a), $str);
-        
+
     //     return $ret;
     // }
 
@@ -140,7 +142,7 @@ class TestListerHelper
     //     $directory = new \RecursiveDirectoryIterator($path, \FilesystemIterator::CURRENT_AS_PATHNAME | \FilesystemIterator::SKIP_DOTS);
     //     $iterator = new \RecursiveIteratorIterator($directory);
     //     $files = \iterator_to_array($iterator, false);
-        
+
     //     $ret = [];
     //     foreach ($files as $file) {
     //         if(substr($file,-strlen($component.'.php'))!==$component.'.php'){continue;};
@@ -153,7 +155,7 @@ class TestListerHelper
     //     $data = file_get_contents($file);
     //     preg_match_all('/public\s+function (([^\(]+)\([^\)]*\))/', (string)$data, $m);
     //     $funcs = $m[1];
-        
+
     //     $ret = '';
     //     $class = substr($file,strlen($path),-strlen('.php'));
     //     $class = $namespace .str_replace('/','\\',$class);

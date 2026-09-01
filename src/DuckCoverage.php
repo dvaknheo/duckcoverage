@@ -49,7 +49,7 @@ class DuckCoverage extends ComponentBase
     protected $current_path_src;
     protected $current_path_dump;
 
-    protected $default_cmd ='duckcover';
+    protected $default_cmd = 'duckcover';
     protected $default_report_dir = 'AAAAA.report';
     protected $default_path = 'DuckCoverage/';
     public function __construct()
@@ -78,19 +78,21 @@ class DuckCoverage extends ComponentBase
         if (!App::_()->isRoot()) {
             return;
         }
-        if ($this->needMoveDateJsonFile()) {
+        if ($this->inCoverageMode()) {
             $this->moveDateJsonFile();
         }
 
         App::_()->options['ext'][static::class] = true;
         PhaseContainer::_()->addPublicClasses([static::class => true]);
     }
-    protected function needMoveDateJsonFile()
+    protected function inCoverageMode()
     {
-        $cmd = $_SERVER['argv'][1] ?? '';
         if (!App::_()->isCli()) {
-            return $this->checkHttp(); //@codeCoverageIgnore
-        } else if ($cmd === $this->default_cmd) {
+            return $this->checkHttp();
+        }
+        $argv = SuperGlobal::_()->_SERVER('argv', []);
+        $cmd = $argv[1] ?? '';
+        if ($cmd === $this->default_cmd) {
             return true;
         }
         return false;
@@ -135,7 +137,9 @@ class DuckCoverage extends ComponentBase
         if (!$this->options['duckcoverage_enable']) {
             return false;
         }
-        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
+        if ($this->current_name && $this->current_group && !App::_()->isCli()) {
+            return true;
+        }
         $client_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
         $server_ip = SuperGlobal::_()->_SERVER('SERVER_ADDR', '');
         $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
@@ -175,9 +179,9 @@ class DuckCoverage extends ComponentBase
     }
     protected function getTestListerText()
     {
-        $test_list ='';
+        $test_list = '';
         $callback = $this->options['duckcoverage_test_lister'] ?? null;
-        if(is_callable($callback)){
+        if (is_callable($callback)) {
             $test_list = $callback();
             $test_list = $this->explainMarco($test_list);
         }
@@ -195,7 +199,7 @@ class DuckCoverage extends ComponentBase
     //////////////////
     protected function replay()
     {
-        $this->cleanClientStatus();   
+        $this->cleanClientStatus();
         $test_list = $this->getTestListerText();
         $test_list = \explode("\n", $test_list);
         $this->current_group = $this->watchingGetName();
@@ -333,7 +337,7 @@ trait DuckCoverage_CommandTrait
         if (empty($request)) {
             return;
         }
-        $argv = explode(" ",$request);       
+        $argv = explode(" ", $request);
         $this->current_name = "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
         $cmd = array_shift($argv);
         $call = ucfirst(strtolower($cmd));
@@ -402,9 +406,9 @@ trait DuckCoverage_CommandTrait
     {
         $sub_cmd = array_shift($argv);
         $pos = strpos($sub_cmd, ":");
-        if(false === $pos){
+        if (false === $pos) {
             $sub_cmd = App::_()->getThisCommandPrefix() . $sub_cmd;
-        }   else if(0 === $pos) {
+        } elseif (0 === $pos) {
             $sub_cmd = substr($sub_cmd, 1);
         }
         $str = implode(" ", $argv);
@@ -424,18 +428,18 @@ trait DuckCoverage_CommandTrait
         $this->doEnd();
     }
     ////////////////////////////////////////////////////////////////////////////
-    protected function callHandler($handler, $ext_args = [])
+    public function callHandler($handler, $ext_args = [])
     {
-        if(!$handler){
+        if (!$handler) {
             return;
         }
-        @list($handler,$parameters) = explode(' ', $handler);
+        @list($handler, $parameters) = explode(' ', $handler);
         $phase = null;
         if (($pos = strpos($handler, '!')) !== false) {
             $phase = (string)substr($handler, 0, $pos + 1);
             $handler = (string)substr($handler, $pos + 1);
         }
-        
+
         // 解析调用方式
         if (preg_match('/^(.+?)(::|@|->)(.+)$/', $handler, $m)) {
             // 类方法调用
@@ -452,11 +456,11 @@ trait DuckCoverage_CommandTrait
         } else {
             return false;
         }
-        if ($phase!== null){
+        if ($phase !== null) {
             $last_phase = App::Phase($phase);
         }
         $ret = $this->callObject($class, $method, $type, $function, $parameters, $ext_args);
-        if ($phase!== null){
+        if ($phase !== null) {
             App::Phase($last_phase);
         }
         return $ret;
@@ -476,10 +480,10 @@ trait DuckCoverage_CommandTrait
             if ($type === '@') {
                 $object = $class::_();
                 $reflect = new \ReflectionMethod($object, $method);
-            } else if ($type === '->') {
+            } elseif ($type === '->') {
                 $object = new $class;
                 $reflect = new \ReflectionMethod($object, $method);
-            } else if ($type === '::') {
+            } elseif ($type === '::') {
                 $reflect = new \ReflectionMethod($class, $method);
             }
         } else {
@@ -669,7 +673,7 @@ trait DuckCoverage_HttpClientTrait
         }
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        //curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1); 
+        //curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
 
         // 始终抓取响应头，以收集/更新所有 Set-Cookie
         curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -693,7 +697,7 @@ trait DuckCoverage_HttpClientTrait
         curl_setopt($ch, CURLOPT_TIMEOUT, 5);
         $this->prepareCurl($ch);
         $data = curl_exec($ch);
-        if(curl_errno($ch) === CURLE_OPERATION_TIMEDOUT){
+        if (curl_errno($ch) === CURLE_OPERATION_TIMEDOUT) {
             echo "curl_file_get_contents timeout";
             return false;
         }

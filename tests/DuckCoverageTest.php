@@ -1,6 +1,7 @@
 <?php
 namespace tests\DuckCoverage;
 
+use DuckPhp\Core\SuperGlobal;
 use DuckPhp\DuckPhp;
 use DuckCoverage\DuckCoverage;
 use DuckPhp\Core\Console;
@@ -48,19 +49,25 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
 
         /////////////
         $_SERVER['argv'] = $__SERVER['argv'];
-        DuckCoverageApp::_(new DuckCoverageApp)->init($options);
+        DuckCoverageApp::_(new DuckCoverageApp);
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
         $_SERVER['SERVER_ADDR'] = '127.0.0.1';
         $_SERVER['HTTP_X_MYCOVERAGE_GROUP'] = 'group1';
         $_SERVER['HTTP_X_MYCOVERAGE_NAME'] = 'name1';
         $_SERVER['HTTP_X_MYCOVERAGE_BEFORERUN'] = DuckCoverageApp::class . '::beforerun';
         $_SERVER['HTTP_X_MYCOVERAGE_AFTERRUN'] = DuckCoverageApp::class . '::afterrun';
-        
         $_SERVER['REQUEST_URI'] ='/';
         $_SERVER['PATH_INFO'] ='';
+        DuckCoverageApp::_()->force_not_cli = true;
+        DuckCoverageApp::_()->init($options);
+        DuckCoverageEx::_()->cleanName();
         DuckCoverageApp::_()->serve();
 
         DuckCoverageApp::_()->testLists();
+         $_SERVER['argv'] = ['-',''];
+        DuckCoverageApp::_(new DuckCoverageApp)->init($options);
+
+
 
         $_SERVER = $__SERVER;
         LibCoverage::_($old);
@@ -126,6 +133,11 @@ class DuckCoverageEx extends DuckCoverage
     {
         return parent::checkHttp();
     }
+    public function cleanName()
+    {
+        $this->current_group = "";
+        $this->current_name = "";
+    }
     #[Override]
     public function doBegin()
     {
@@ -157,11 +169,19 @@ class DuckCoverageEx extends DuckCoverage
 }
 class DuckCoverageApp extends DuckPhp
 {
+    public $force_not_cli =false;
     public function testLists()
     {
         $str = DuckCoverage::_()->genTestListOfAll();
     }
 
+    public function isCli()
+    {
+        if ($this->force_not_cli){
+            return false;
+        }
+        return parent::isCli();
+    }
     public function command_mycmd()
     {
         //$this->assertTrue(true);
