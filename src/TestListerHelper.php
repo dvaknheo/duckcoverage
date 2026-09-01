@@ -177,7 +177,7 @@ class TestListerHelper
             if (substr($file, -strlen('.php')) !== '.php') {
                 continue;
             }
-            $rel = substr($file, strlen($base_dir), -strlen('.php'));
+            $rel = ltrim(substr($file, strlen($base_dir), -strlen('.php')), '/\\');
             $class = $namespace_prefix.'\\'.str_replace('/', '\\', $rel);
             try {
                 // @phpstan-ignore-next-line argument.type
