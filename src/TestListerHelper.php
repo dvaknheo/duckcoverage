@@ -22,7 +22,7 @@ class TestListerHelper
         $list = '';
         $last_phase = App::Phase();
         App::_()->toThisChild($child);
-        $callback  = App::_()->option['duckcoverage_test_lister'];
+        $callback  = App::_()->options['duckcoverage_test_lister'];
         if ($callback) {
             $list = ($callback)();
             $list =  $this->explainMarco($list);
@@ -40,9 +40,9 @@ class TestListerHelper
                 $ret[] = $this->doPhaseBegin();
             } elseif ($line === '#PHASE_END'){
                 $ret[] = $this->doPhaseEnd();
-            } else if(substr($line,0,strlen('#INCLUDE_CALL '))){
+            } else if(substr($line,0,strlen('#INCLUDE_CALL '))==='#INCLUDE_CALL '){
                 $ret[] = $this->doIncludeCall($line);
-            } else if(substr($line,0,strlen('#INCLUDE_APP '))){
+            } else if(substr($line,0,strlen('#INCLUDE_CHILD '))==='#INCLUDE_CHILD '){
                 $ret[] = $this->doIncludeChild($line);
             } else {
                 $ret[] = $line;
@@ -70,32 +70,32 @@ class TestListerHelper
         [$_default, $child_app] = explode(" ",$line);
         return $this->getChildList($child_app);
     }
-    protected function replaceLineStart(string $content, array $rules): string
-    {
-        foreach ($rules as $prefix => $append) {
-            if (strncmp($content, $prefix, strlen($prefix)) === 0) {
-                return substr_replace($content, $append, strlen($prefix), 0);
-            }
-        }
-        return $content;
-    }
-    protected function replaceMarco($str,$args)
-    {
-        if (empty($args)) {
-            return $str;
-        }
-        if (false === strpos($str,'{')) {
-            return $str;
-        }
-        $a = [];
-        foreach ($args as $k => $v) {
-            $a["{".$k."}"] = $v;
-        }
+    // public function replaceLineStart(string $content, array $rules): string
+    // {
+    //     foreach ($rules as $prefix => $append) {
+    //         if (strncmp($content, $prefix, strlen($prefix)) === 0) {
+    //             return substr_replace($content, $append, strlen($prefix), 0);
+    //         }
+    //     }
+    //     return $content;
+    // }
+    // public function replaceMarco($str,$args)
+    // {
+    //     if (empty($args)) {
+    //         return $str;
+    //     }
+    //     if (false === strpos($str,'{')) {
+    //         return $str;
+    //     }
+    //     $a = [];
+    //     foreach ($args as $k => $v) {
+    //         $a["{".$k."}"] = $v;
+    //     }
         
-        $ret = str_replace(array_keys($a), array_values($a), $str);
+    //     $ret = str_replace(array_keys($a), array_values($a), $str);
         
-        return $ret;
-    }
+    //     return $ret;
+    // }
 
     public function listForAllRoute()
     {
