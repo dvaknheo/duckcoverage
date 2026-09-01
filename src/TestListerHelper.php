@@ -8,6 +8,7 @@ namespace DuckCoverage;
 
 use DuckPhp\Component\RouteLister;
 use DuckPhp\Core\App;
+use DuckPhp\Core\Console;
 use DuckPhp\Core\SingletonExTrait;
 
 class TestListerHelper
@@ -104,19 +105,119 @@ class TestListerHelper
 
     public function genTestListOfRoutes()
     {
-        return '';
-        //$routes = RouteLister::_()->listAll(true,true);
-        //TODO 我们根据路由给出测试语句
+        $routes = RouteLister::_()->listAll(true, true);
+        $list = [];
+        foreach ($routes as $route) {
+            $uri = $route['url'] ?? '';
+            if ($uri === '') {
+                continue;
+            }
+            $list[] = "WEB {$uri}";
+        }
+        return implode("\n", $list);
     }
     public function genTestListOfCommands()
     {
-        return '';
-        //TODO 我们根据 command 给出测试语句
+        $prefix = App::_()->getThisCommandPrefix();
+        $classes = Console::_()->options['console_command_classes'][$prefix] ?? [];
+        $list = [];
+        foreach ($classes as $class => $method_prefix) {
+            if (!isset($method_prefix) || $method_prefix === false) {
+                continue;
+            }
+            $method_prefix = ($method_prefix === true) ? 'command_' : $method_prefix;
+
+            $reflect = new \ReflectionClass($class);
+            foreach ($reflect->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
+                if ($method->isStatic() || $method->isConstructor()) {
+                    continue;
+                }
+                $method_name = $method->getName();
+                if (substr($method_name, 0, strlen($method_prefix)) !== $method_prefix) {
+                    continue;
+                }
+                $cmd = substr($method_name, strlen($method_prefix));
+                $command = ($prefix === '') ? $cmd : $prefix . ':' . $cmd;
+                $list[] = "RUN {$command}";
+            }
+        }
+        return implode("\n", $list);
     }
-    public function genTestListOfComponents()
+    public function genTestListOfComponents($components = ['Business', 'Model'])
     {
-        return '';
-        //TODO 我们给出所有组件列表
+        $base_dir = App::_()->options['path_namespace'] ?? null;
+        if (empty($base_dir)) {
+            throw new \LogicException('options[path_namespace] is required for genTestListOfComponents()');
+        }
+        $is_abs = (substr($base_dir, 0, 1) === '/') || preg_match('#^[a-zA-Z]:[\\\\/]#', $base_dir) === 1;
+        if (!$is_abs) {
+            $base_dir = App::_()->getProjectPath().$base_dir;
+        }
+        $base_dir = rtrim($base_dir, '/\\').DIRECTORY_SEPARATOR;
+
+        $namespace = trim((string)App::_()->options['namespace'], '\\');
+        $prefix = $namespace === '' ? '' : $namespace.'\\';
+
+        $list = [];
+        foreach ($components as $component) {
+            $component_dir = $base_dir.$component;
+            if (!is_dir($component_dir)) {
+                continue;
+            }
+            $list = array_merge($list, $this->getComponentCalls($component_dir, $prefix.$component, $component_dir));
+        }
+        return implode("\n", $list);
+    }
+    protected function getComponentCalls($dir, $namespace_prefix, $base_dir)
+    {
+        $directory = new \RecursiveDirectoryIterator($dir, \FilesystemIterator::CURRENT_AS_PATHNAME | \FilesystemIterator::SKIP_DOTS);
+        $iterator = new \RecursiveIteratorIterator($directory);
+        $ret = [];
+        foreach ($iterator as $file) {
+            if (substr($file, -strlen('.php')) !== '.php') {
+                continue;
+            }
+            $rel = substr($file, strlen($base_dir), -strlen('.php'));
+            $class = $namespace_prefix.'\\'.str_replace('/', '\\', $rel);
+            try {
+                // @phpstan-ignore-next-line argument.type
+                $reflect = new \ReflectionClass($class);
+            } catch (\ReflectionException $ex) {
+                continue;
+            }
+            if ($reflect->isAbstract() || $reflect->isInterface() || $reflect->isTrait() || $reflect->isEnum()) {
+                continue;
+            }
+            if (!$reflect->hasMethod('_')) {
+                continue;
+            }
+            foreach ($reflect->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
+                if ($method->isStatic() || $method->isConstructor() || $method->isAbstract()) {
+                    continue;
+                }
+                // 只收录声明在本类文件内的动态方法，排除从父类/trait 继承的方法
+                if ((string)$method->getFileName() !== (string)realpath($file)) {
+                    continue;
+                }
+                $ret[] = "CALL {$class}@{$method->getName()}".$this->getCallParams($method);
+            }
+        }
+        return $ret;
+    }
+    protected function getCallParams(\ReflectionMethod $method)
+    {
+        $str = '';
+        foreach ($method->getParameters() as $param) {
+            $default = null;
+            if ($param->isDefaultValueAvailable()) {
+                $value = $param->getDefaultValue();
+                $default = is_scalar($value) ? (string)$value : '';
+            } else {
+                $default = '';
+            }
+            $str .= ' '.$param->getName().'='.$default;
+        }
+        return $str;
     }
 
     public function genTestListOfAll()
