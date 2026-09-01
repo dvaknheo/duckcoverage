@@ -173,7 +173,7 @@ class DuckCoverage extends ComponentBase
         $this->doEnd();
         //@codeCoverageIgnoreEnd
     }
-    public function getTestListerText()
+    protected function getTestListerText()
     {
         $test_list ='';
         $callback = $this->options['duckcoverage_test_lister'] ?? null;
@@ -183,7 +183,7 @@ class DuckCoverage extends ComponentBase
         }
         return $test_list;
     }
-    public function explainMarco($test_list)
+    protected function explainMarco($test_list)
     {
         return TestListerHelper::_()->explainMarco($test_list);
     }
@@ -213,7 +213,7 @@ class DuckCoverage extends ComponentBase
         $p = Console::_()->getCliParameters();
         $this->doCommand($p);
     }
-    public function doCommand($p)
+    protected function doCommand($p)
     {
         if ($p['help'] ?? false || count($p) === 1) {
             $str = <<<EOT
@@ -312,15 +312,15 @@ EOT;
     {
         return GroupCoverage::_();
     }
-    public function doBegin()
+    protected function doBegin()
     {
         $this->getRunner()->doBegin($this->current_name, $this->current_group, $this->current_path_src, $this->current_path_dump);
     }
-    public function doEnd()
+    protected function doEnd()
     {
         $this->getRunner()->doEnd();  // @codeCoverageIgnore
     }
-    public function createReport($groups, $path_src, $path_dump, $path_report)
+    protected function createReport($groups, $path_src, $path_dump, $path_report)
     {
         return $this->getRunner()->createReport($groups, $path_src, $path_dump, $path_report);
     }
@@ -346,11 +346,11 @@ trait DuckCoverage_CommandTrait
         echo $request;
         echo "\n";
     }
-    public function explainComment(array $argv)
+    protected function explainComment(array $argv)
     {
         //do nothing.
     }
-    public function explainPhase(array $argv)
+    protected function explainPhase(array $argv)
     {
         $param = $argv[0];
         $this->doBegin();
@@ -424,7 +424,7 @@ trait DuckCoverage_CommandTrait
         $this->doEnd();
     }
     ////////////////////////////////////////////////////////////////////////////
-    public function callHandler($handler, $ext_args = [])
+    protected function callHandler($handler, $ext_args = [])
     {
         if(!$handler){
             return;
@@ -504,7 +504,7 @@ trait DuckCoverage_CommandTrait
         }
         return $ret;
     }
-    public function shell_parse(string $str): array
+    protected function shell_parse(string $str): array
     {
         $result = [];
         $buffer = '';
@@ -614,7 +614,7 @@ trait DuckCoverage_HttpClientTrait
     protected $pre_webcall;
     protected $post_webcall;
 
-    public function prepareCurl($ch)
+    protected function prepareCurl($ch)
     {
         $this->headers[] = 'X-MyCoverage-Name: ' . $this->current_name;
         $this->headers[] = 'X-MyCoverage-Group: ' . $this->current_group;
@@ -646,7 +646,7 @@ trait DuckCoverage_HttpClientTrait
         return $ch;
     }
 
-    public function postpareCurl($ch)
+    protected function postpareCurl($ch)
     {
         $post_curl = $this->post_curl;
         $this->post_curl = null;
