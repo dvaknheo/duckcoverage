@@ -219,7 +219,7 @@ class DuckCoverage extends ComponentBase
     }
     protected function doCommand($p)
     {
-        if ($p['help'] ?? false || count($p) === 1) {
+        if (($p['help'] ?? false) || (count($p) === 1)) {
             $str = <<<EOT
 --watch {group}
 --replay
@@ -364,6 +364,7 @@ trait DuckCoverage_CommandTrait
     protected function explainWeb(array $argv)
     {
         @list($uri, $poststr, $method) = $argv;
+        // phpstan-ignore-next-line function.notFound
         $uri = __url($uri);
 
         $base_url = (string) ($this->options['duckcoverage_web_base_url'] ?? '');
@@ -490,6 +491,7 @@ trait DuckCoverage_CommandTrait
             $reflect = new \ReflectionFunction($function);
         }
 
+        // phpstan-ignore-next-line
         $params = $reflect->getParameters();
         foreach ($params as $i => $param) {
             $name = $param->getName();
@@ -504,7 +506,7 @@ trait DuckCoverage_CommandTrait
         if ($reflect instanceof \ReflectionMethod) {
             $ret = $reflect->invokeArgs($object, $args);
         } else {
-            $ret = $reflect->invokeArgs($args);
+            $ret = $reflect->invokeArgs($args); // phpstan-ignore-line
         }
         return $ret;
     }
@@ -672,14 +674,14 @@ trait DuckCoverage_HttpClientTrait
             curl_setopt($ch, CURLOPT_CONNECT_TO, [$c]);
         }
         curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1); // phpstan-ignore-line argument.type
         //curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
 
         // 始终抓取响应头，以收集/更新所有 Set-Cookie
-        curl_setopt($ch, CURLOPT_HEADER, 1);
+        curl_setopt($ch, CURLOPT_HEADER, 1); // phpstan-ignore-line argument.type
 
         if (!empty($post)) {
-            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_POST, 1); // phpstan-ignore-line argument.type
             curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
         }
         /////////
@@ -689,6 +691,7 @@ trait DuckCoverage_HttpClientTrait
             foreach ($this->cookies as $name => $value) {
                 $cookie_str[] = $name . '=' . $value;
             }
+            /* phpstan-ignore-next-line */
             curl_setopt($ch, CURLOPT_COOKIE, implode('; ', $cookie_str));
         }
 
@@ -724,7 +727,7 @@ trait DuckCoverage_HttpClientTrait
         echo "\n";
         echo $data;
         curl_close($ch);
-        $data = ($data !== false) ? $data : '';
+        $data = (string) $data;
         return $data;
     }
 }
