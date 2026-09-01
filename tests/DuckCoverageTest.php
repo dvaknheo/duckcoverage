@@ -159,10 +159,7 @@ class DuckCoverageApp extends DuckPhp
 {
     public function testLists()
     {
-        $str = DuckCoverage::_()->listForAllRoute();
-        $str = DuckCoverage::_()->listForAllCommand();
-        $str = DuckCoverage::_()->listForAllBusiness();
-        $str = DuckCoverage::_()->listForAllModel();     
+        $str = DuckCoverage::_()->genTestListOfAll();
     }
 
     public function command_mycmd()

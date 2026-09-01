@@ -175,30 +175,22 @@ class DuckCoverage extends ComponentBase
     }
     public function getTestListerText()
     {
+        $test_list ='';
         $callback = $this->options['duckcoverage_test_lister'] ?? null;
-        $test_list = $callback();
-        $test_list = $this->explainMarco($test_list);
+        if(is_callable($callback)){
+            $test_list = $callback();
+            $test_list = $this->explainMarco($test_list);
+        }
         return $test_list;
-    }
-    public function listForAllRoute()
-    {
-        return TestListerHelper::_()->listForAllRoute();
-    }
-    public function listForAllCommand()
-    {
-        return TestListerHelper::_()->listForAllCommand();
-    }
-    public function listForAllBusiness()
-    {
-        return TestListerHelper::_()->listForAllBusiness();
-    }
-    public function listForAllModel()
-    {
-        return TestListerHelper::_()->listForAllModel();
     }
     public function explainMarco($test_list)
     {
         return TestListerHelper::_()->explainMarco($test_list);
+    }
+    //////////////////
+    public function genTestListOfAll()
+    {
+        return TestListerHelper::_()->genTestListOfAll();
     }
     //////////////////
     protected function replay()

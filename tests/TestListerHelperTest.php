@@ -32,10 +32,7 @@ EOT;
 
         //TestListerHelper::_()->replaceLineStart($list);
 
-        TestListerHelper::_()->listForAllCommand();
-        TestListerHelper::_()->listForAllRoute();
-        TestListerHelper::_()->listForAllBusiness();
-        TestListerHelper::_()->listForAllModel();
+        TestListerHelper::_()->genTestListOfAll();
         
         LibCoverage::_()->cleanDirectory($path);
         $_SERVER = $__SERVER;
