@@ -364,7 +364,6 @@ trait DuckCoverage_CommandTrait
     protected function explainWeb(array $argv)
     {
         @list($uri, $poststr, $method) = $argv;
-        // phpstan-ignore-next-line function.notFound
         $uri = __url($uri);
 
         $base_url = (string) ($this->options['duckcoverage_web_base_url'] ?? '');
@@ -491,7 +490,7 @@ trait DuckCoverage_CommandTrait
             $reflect = new \ReflectionFunction($function);
         }
 
-        // phpstan-ignore-next-line
+        // @phpstan-ignore-next-line method.nonObject
         $params = $reflect->getParameters();
         foreach ($params as $i => $param) {
             $name = $param->getName();
@@ -506,7 +505,7 @@ trait DuckCoverage_CommandTrait
         if ($reflect instanceof \ReflectionMethod) {
             $ret = $reflect->invokeArgs($object, $args);
         } else {
-            $ret = $reflect->invokeArgs($args); // phpstan-ignore-line
+            $ret = $reflect->invokeArgs($args); // @phpstan-ignore-line method.nonObject
         }
         return $ret;
     }
@@ -674,14 +673,14 @@ trait DuckCoverage_HttpClientTrait
             curl_setopt($ch, CURLOPT_CONNECT_TO, [$c]);
         }
         curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1); // phpstan-ignore-line argument.type
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1); // @phpstan-ignore-line argument.type
         //curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
 
         // 始终抓取响应头，以收集/更新所有 Set-Cookie
-        curl_setopt($ch, CURLOPT_HEADER, 1); // phpstan-ignore-line argument.type
+        curl_setopt($ch, CURLOPT_HEADER, 1); // @phpstan-ignore-line argument.type
 
         if (!empty($post)) {
-            curl_setopt($ch, CURLOPT_POST, 1); // phpstan-ignore-line argument.type
+            curl_setopt($ch, CURLOPT_POST, 1); // @phpstan-ignore-line argument.type
             curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
         }
         /////////
@@ -691,7 +690,7 @@ trait DuckCoverage_HttpClientTrait
             foreach ($this->cookies as $name => $value) {
                 $cookie_str[] = $name . '=' . $value;
             }
-            /* phpstan-ignore-next-line */
+            /* @phpstan-ignore-next-line argument.type */
             curl_setopt($ch, CURLOPT_COOKIE, implode('; ', $cookie_str));
         }
 
