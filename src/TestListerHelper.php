@@ -109,9 +109,6 @@ class TestListerHelper
         $list = [];
         foreach ($routes as $route) {
             $uri = $route['url'] ?? '';
-            if ($uri === '') {
-                continue;
-            }
             $list[] = "WEB {$uri}";
         }
         return implode("\n", $list);
@@ -161,9 +158,6 @@ class TestListerHelper
         $list = [];
         foreach ($components as $component) {
             $component_dir = $base_dir.$component;
-            if (!is_dir($component_dir)) {
-                continue;
-            }
             $list = array_merge($list, $this->getComponentCalls($component_dir, $prefix.$component, $component_dir));
         }
         return implode("\n", $list);

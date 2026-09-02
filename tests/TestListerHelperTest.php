@@ -59,6 +59,7 @@ class TLHostApp extends DuckPhp
         "controller_method_prefix" => "action_",
         "cmd" => [
             TLCommand::class => true,
+            'NoExists' => false,
         ],
     ];
 }
@@ -166,6 +167,9 @@ class TLModel
 EOT);
         // 非 php 文件：覆盖 getComponentCalls 里"非 .php 跳过"分支
         file_put_contents($path.'src/Business/notphp.txt', "x");
+        // .php 但类名不匹配：触发 getComponentCalls 的 ReflectionException 分支
+        // （推导出的类 TestListHelpInner\Business\TLMissing 不存在）
+        file_put_contents($path.'src/Business/TLMissing.php', "<?php\nnamespace TestListHelpInner\\Other;\nclass TLMissingNotHere {}\n");
     }
     protected function writeFile($file, $content)
     {
@@ -202,6 +206,17 @@ EOT);
 
         $components = TestListerHelper::_()->genTestListOfComponents();
         $this->assertStringContainsString('CALL ', (string)$components);
+
+        // genTestListOfComponents 扫描 src/Business 时会遇到 TLMissing.php，
+        // 其对应类 TestListHelpInner\Business\TLMissing 不存在，
+        // 以此覆盖 getComponentCalls 的 ReflectionException 捕获分支。
+
+        try{
+            TLHostApp::_()->options['path_namespace']=null;
+            TestListerHelper::_()->genTestListOfComponents();
+        }catch(\LogicException $e){
+            //ignore;
+        }
     }
 }
 class TLApp extends DuckPhp

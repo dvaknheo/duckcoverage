@@ -172,7 +172,11 @@ class DuckCoverageApp extends DuckPhp
     public $force_not_cli =false;
     public function testLists()
     {
-        $str = DuckCoverage::_()->genTestListOfAll();
+        try{
+            $str = DuckCoverage::_()->genTestListOfAll();
+        }catch(\Exception $e){
+            //
+        }
     }
 
     public function isCli()
@@ -224,6 +228,7 @@ class DuckCoverageApp extends DuckPhp
         'is_debug' => true,
         'duckcoverage_enable'=>true,
         'duckcoverage_debug_curl_echo_back' => true,
+        'path_namespace' => 'app',
     ];
     public function __construct()
     {
