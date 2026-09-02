@@ -1,6 +1,6 @@
 # DuckCoverage
 
-[中文](README-zh.md) | [Quick Start](QUICKSTART.md) | [中文快速手册](QUICKSTART-zh.md)
+[中文](README-zh.md)
 
 **DuckCoverage** is a test-coverage extension for [DuckPHP](https://github.com/dvaknheo/duckphp) applications.
 It collects line coverage from real HTTP requests and CLI calls, replays recorded requests, and renders HTML coverage reports — without writing any unit tests.
@@ -12,7 +12,7 @@ It is the DuckPHP counterpart of [LibCoverage](https://github.com/dvaknheo/libco
 - **Coverage from real traffic** — every web request (browser, curl, or automated tools) can be traced by sending a `X-MyCoverage-Name` header.
 - **Request recording** — watched requests are appended to a replayable list file (`test_coveragedumps/<group>.list`).
 - **Replay** — recorded requests are re-run against a built-in PHP test server or an external server (nginx, etc.), each replayed request contributing coverage.
-- **Direct CLI calls** — call any class method or function locally with `--call` and cover it.
+- **Direct calls (no HTTP)** — via `CALL` / `RUN` directives in the replay test list, covered during `--go`/`--replay`.
 - **Group workflow** — `--watch <group>` → browse/replay → `--report` renders an HTML report per group.
 - **HTML reports** — powered by `phpunit/php-code-coverage`.
 
@@ -23,7 +23,7 @@ It is the DuckPHP counterpart of [LibCoverage](https://github.com/dvaknheo/libco
 - `phpunit/php-code-coverage` (9.x)
 - A coverage driver: **Xdebug** or **PCOV** must be loaded
 
-> **Note:** the current `composer.json` only declares `dvaknheo/libcoverage` as a dev dependency; DuckPHP, php-code-coverage and a coverage driver must be installed in your application explicitly (see [QUICKSTART.md](QUICKSTART.md)).
+> **Note:** the package's `require` declares the runtime dependencies `dvaknheo/duckphp` and `dvaknheo/libcoverage`; `phpunit/php-code-coverage` is only under `require-dev` (used for this package's own tests). To render HTML reports in your application you must install `phpunit/php-code-coverage` yourself and load a coverage driver (Xdebug or PCOV) — see [Requirements](#requirements) and [Installation](#installation).
 
 ## Installation
 
@@ -72,7 +72,6 @@ The CLI entry file (`cli.php`) follows your DuckPHP project template; adjust it 
 | `--watch <name>` | start recording test group `<name>` (no name → auto timestamp). Writes `runtime/DuckCoverage.watching.txt` |
 | `--stop` | stop watching (removes the watching marker) |
 | `--replay` | replay the test list returned by the callback class `GetTestList()` |
-| `--call <Class>@<method>` | directly call a local method and collect coverage for it (slashes are converted to backslashes) |
 | `--report [a b c]` | render the HTML report for the given groups (default: current watching group), print output path & time cost |
 
 ## Options
