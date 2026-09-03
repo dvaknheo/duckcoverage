@@ -194,7 +194,7 @@ EOT);
             include $path.$f;
         }
 
-        TLHostApp::_()->init(['path' => $path]);
+        TLHostApp::_()->init(['path' => $path, 'namespace' => 'TestListHelpInner']);
         TestListerHelper::_()->genTestListOfAll();
 
         // 显式调用各项并断言基本形态，确保新方法被执行
@@ -241,6 +241,13 @@ class TLAppChild extends DuckPhp
         'name'=>'TLAppChild',
         'duckcoverage_test_lister'=>[TLAppChild::class, 'GetTestList'],
     ];
+    public function getThisClassName()
+    {
+        if (static::class === 'tests\\DuckCoverage\\TLAppChild') {
+            return 'TestListHelpInner\\TLHostApp';
+        }
+        return $this->this_class;
+    }
     public static function GetTestList()
     {
         echo "COMMENT from TLAppChild\n";

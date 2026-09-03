@@ -142,23 +142,42 @@ class TestListerHelper
     }
     public function genTestListOfComponents($components = ['Business', 'Model'])
     {
-        $base_dir = App::_()->options['path_namespace'] ?? null;
-        if (empty($base_dir)) {
-            throw new \LogicException('options[path_namespace] is required for genTestListOfComponents()');
-        }
-        $is_abs = (substr($base_dir, 0, 1) === '/') || preg_match('#^[a-zA-Z]:[\\\\/]#', $base_dir) === 1;
-        if (!$is_abs) {
-            $base_dir = App::_()->getProjectPath().$base_dir;
-        }
-        $base_dir = rtrim($base_dir, '/\\').DIRECTORY_SEPARATOR;
+        $class = App::_()->getThisClassName();
+        $reflect = new \ReflectionClass($class);
+        $filename = $reflect->getFileName();
 
-        $namespace = trim((string)App::_()->options['namespace'], '\\');
-        $prefix = $namespace === '' ? '' : $namespace.'\\';
+        if (!is_string($filename) || $filename === '') {
+            throw new \LogicException("Can not locate file for App->getThisClassName() '{$class}'"); //@codeCoverageIgnore
+        }
+
+        $namespace = trim((string) App::_()->options['namespace'], '\\');
+        $prefix = $namespace === '' ? '' : $namespace . '\\';
+        if ($namespace !== '' && strpos($class . '\\', $prefix) !== 0) {
+            throw new \LogicException("App->getThisClassName() '{$class}' is not under namespace '{$namespace}'"); //@codeCoverageIgnore
+        }
+
+        $relative_class = $namespace === '' ? $class : substr($class, strlen($prefix));
+        $base_path = dirname($filename) . DIRECTORY_SEPARATOR;
+        $base_dir = rtrim($base_path, '/\\') . DIRECTORY_SEPARATOR;
+        $base_dir = preg_replace('#(?:^|[/\\\\])System/?$#', DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR, $base_dir);
+        if (is_dir($base_dir . 'Business') === false) {
+            $base_dir = rtrim(dirname($base_dir), '/\\') . DIRECTORY_SEPARATOR;
+        }
 
         $list = [];
         foreach ($components as $component) {
-            $component_dir = $base_dir.$component;
-            $list = array_merge($list, $this->getComponentCalls($component_dir, $prefix.$component, $component_dir));
+            $component = trim((string) $component, '/\\');
+            if ($component === '') {
+                continue; //@codeCoverageIgnore
+            }
+
+            $component_dir = $base_dir . $component . DIRECTORY_SEPARATOR;
+            if (!is_dir($component_dir)) {
+                continue; //@codeCoverageIgnore
+            }
+
+            $component_namespace = $prefix . $component;
+            $list = array_merge($list, $this->getComponentCalls($component_dir, $component_namespace, $component_dir));
         }
         return implode("\n", $list);
     }
