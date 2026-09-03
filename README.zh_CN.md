@@ -1,6 +1,6 @@
 # DuckCoverage
 
-[English](README.md)
+[English](README.md) | [中文](README.zh_CN.md)
 
 **DuckCoverage** 是用于 [DuckPHP](https://github.com/dvaknheo/duckphp) 应用的测试覆盖率扩展。
 它从真实的 HTTP 请求和 CLI 调用中采集行覆盖率，回放已记录的请求，并生成 HTML 覆盖率报告——无需编写任何单元测试。
@@ -34,7 +34,6 @@ php -m | grep -i -E "xdebug|pcov"        # Linux / macOS
 
 没有驱动时，DuckCoverage 在创建 `CodeCoverage` 阶段会失败（`doBegin`）。请先安装驱动。
 
-> **注意**：本包 `require` 已声明运行所需依赖 `dvaknheo/duckphp` 与 `dvaknheo/libcoverage`；而 `phpunit/php-code-coverage` 只在 `require-dev`（用于本包自测）。因此在你的应用里要生成渲染报告，需自行安装 `phpunit/php-code-coverage`，并加载 Xdebug 或 PCOV 覆盖率驱动（见上文「环境要求」）。
 
 ## 安装
 
