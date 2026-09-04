@@ -197,7 +197,7 @@ class DuckCoverage extends ComponentBase
         return TestListerHelper::_()->genTestListOfAll();
     }
     //////////////////
-    protected function replay()
+    protected function play()
     {
         $this->cleanClientStatus();
         $test_list = $this->getTestListerText();
@@ -222,7 +222,7 @@ class DuckCoverage extends ComponentBase
         if (($p['help'] ?? false) || (count($p) === 1)) {
             $str = <<<EOT
 --watch {group}
---replay
+--play
 --stop
 --report a
 --report a b c
@@ -243,9 +243,9 @@ EOT;
         if ($p['stop'] ?? false) {
             $this->watchingEnd();
         }
-        if ($p['replay'] ?? false) {
-            $this->replay();
-            echo "replaying";
+        if ($p['play'] ?? false) {
+            $this->play();
+            echo "playing";
         }
 
         if ($p['report'] ?? false) {
@@ -264,7 +264,7 @@ EOT;
             $this->options['duckcoverage_report_direct'] = true;
             $this->watchingBegin($watch_name);
             echo "watching {$watch_name}\n";
-            $this->replay();
+            $this->play();
             $this->watchingEnd();
             echo "watched {$watch_name}\n";
             $this->doReport([$watch_name]);

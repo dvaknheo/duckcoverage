@@ -2,17 +2,17 @@
 
 [English](README.md) | [中文](README.zh_CN.md)
 
-**DuckCoverage** is a test coverage extension for [DuckPHP](https://github.com/dvaknheo/duckphp) applications. It collects line coverage from real HTTP requests and CLI calls, replays recorded requests, and generates HTML coverage reports without requiring you to write unit tests.
+**DuckCoverage** is a test coverage extension for [DuckPHP](https://github.com/dvaknheo/duckphp) applications. It collects line coverage from real HTTP requests and CLI calls, plays recorded requests, and generates HTML coverage reports without requiring you to write unit tests.
 
 It works with [LibCoverage](https://github.com/dvaknheo/libcoverage), the coverage tool for standalone PHP libraries. Both projects use the `test_coveragedumps` / `test_reports` directory convention.
 
 ## Features
 
 - **Coverage from real traffic** — Every web request (from a browser, curl, or an automated tool) can be traced by sending an `X-MyCoverage-Name` header.
-- **Request recording** — Watched requests are appended to a replayable list file (`test_coveragedumps/<group>.list`).
-- **Replay** — Recorded requests are replayed against the built-in PHP test server (or an external server such as nginx); every replayed request contributes coverage.
+- **Request recording** — Watched requests are appended to a playable list file (`test_coveragedumps/<group>.list`).
+- **play** — Recorded requests are played against the built-in PHP test server (or an external server such as nginx); every played request contributes coverage.
 - **Direct CLI calls** — Use `RUN` / `CALL` to invoke local class methods or functions and collect coverage.
-- **Grouped workflow** — `--watch <group>` → browse / replay → `--report` renders an HTML report for the group.
+- **Grouped workflow** — `--watch <group>` → browse / play → `--report` renders an HTML report for the group.
 - **HTML reports** — Reports are rendered by `phpunit/php-code-coverage`.
 
 ## Requirements
@@ -117,21 +117,21 @@ The CLI entry file (`cli.php`) follows your DuckPHP project template. Replace it
 
 ## Workflow
 
-Coverage collection, replay, and report generation are all controlled through the CLI command `php cli.php duckcover`; there is no separate interactive “browse and collect” workflow.
+Coverage collection, play, and report generation are all controlled through the CLI command `php cli.php duckcover`; there is no separate interactive “browse and collect” workflow.
 
 ### One-step operation: `--go`
 
 The most common approach is to use `--go <group>` to complete the entire workflow in one command. It is equivalent to:
 
 ```text
-watch → replay → stop → report
+watch → play → stop → report
 ```
 
 ```bash
 php cli.php duckcover --go group1
 ```
 
-- Result: runs the complete replay and generates a report for `group1`.
+- Result: runs the complete play and generates a report for `group1`.
 - Report location: `runtime/DuckCoverage/group1.report/`.
 - This command is especially suitable for CI.
 
@@ -141,17 +141,17 @@ When you need to inspect intermediate states or extend the workflow manually, ru
 
 ```bash
 php cli.php duckcover --watch group1    # ① Start watching group1
-php cli.php duckcover --replay          # ② Replay the requests/calls in the callback list
+php cli.php duckcover --play          # ② play the requests/calls in the callback list
 php cli.php duckcover --report group1   # ③ Render the HTML report for the group
 php cli.php duckcover --stop            # ④ Stop watching
 ```
 
-- `--replay` starts the built-in test server (or points to the external server configured with `duckcoverage_web_base_url`) and executes the test directives returned by `GetTestList()` one line at a time. Every replayed request is collected again, and the server is stopped afterward.
+- `--play` starts the built-in test server (or points to the external server configured with `duckcoverage_web_base_url`) and executes the test directives returned by `GetTestList()` one line at a time. Every played request is collected again, and the server is stopped afterward.
 - `--report` merges all dumps for one group (or multiple groups with `--report a b c`) and renders an HTML report under `runtime/test_reports/`.
 
 ### Direct calls without HTTP
 
-Class and function calls that do not use HTTP can be added to the replay callback with `CALL` (or to shell commands with `RUN`). They are executed and covered together with `--go` or `--replay`:
+Class and function calls that do not use HTTP can be added to the play callback with `CALL` (or to shell commands with `RUN`). They are executed and covered together with `--go` or `--play`:
 
 ```text
 CALL MyApp\Test\Tester@doSomething         # @ means use the singleton (call _())
@@ -160,7 +160,7 @@ CALL MyApp\Helper::format                  # :: means a static call
 CALL some_function                         # A plain function
 ```
 
-Arguments use `name=value` and are matched by parameter name:
+Arguments use `name=value`(parse_url) and are matched by parameter name:
 
 ```text
 CALL MyApp\Test\Tester@runX parameter=d
@@ -176,7 +176,7 @@ To use an external server instead of the built-in test server, configure its bas
 'duckcoverage_web_base_url' => 'http://www.example.com/',
 ```
 
-- Replaying `WEB /admin/index` then sends a request to `http://www.example.com/admin/index`.
+- playing `WEB /admin/index` then sends a request to `http://www.example.com/admin/index`.
 - The external server must accept and forward the `X-MyCoverage-Name` header (nginx forwards custom headers by default).
 - You must still start watching the same group with `--watch` for the matching logic to take effect.
 
@@ -187,7 +187,7 @@ All commands:
 ```bash
 php cli.php duckcover
   --watch {group}
-  --replay
+  --play
   --stop
   --report group1
   --report group1 group2 group3
@@ -199,15 +199,15 @@ php cli.php duckcover
 | (no arguments) / `--help` | Print usage help |
 | `--watch <group>` | Start watching a test group. If no group is supplied, a timestamp is generated. Writes `runtime/DuckCoverage.watching.txt`. |
 | `--stop` | Stop watching and remove the watching marker. |
-| `--replay` | Replay the test list returned by the callback's `GetTestList()`. |
+| `--play` | play the test list returned by the callback's `GetTestList()`. |
 | `--report [a b c]` | Render an HTML report for the specified groups (the current watched group by default) and print the output path and elapsed time. |
-| `--go <group>` | Combined command: `watch + replay + stop + report` in one step (CI-friendly). |
+| `--go <group>` | Combined command: `watch + play + stop + report` in one step (CI-friendly). |
 
 `--go group1` is equivalent to running:
 
 ```bash
 php cli.php duckcover --watch group1
-php cli.php duckcover --replay
+php cli.php duckcover --play
 php cli.php duckcover --stop
 php cli.php duckcover --report group1
 ```
@@ -218,8 +218,8 @@ php cli.php duckcover --report group1
 
 | Directive | Description |
 |---|---|
-| `WEB <uri> [post] [AJAX|OPTIONS]` | Replay an HTTP request. The second part is POST data (`a=1&b=2`); the third part may be `AJAX` or `OPTIONS`. |
-| `RUN <command>` | Execute a shell command unchanged (no escaping; a non-zero exit code only prints a warning and does not interrupt replay). It runs in the current process rather than a separate process. |
+| `WEB <uri> [post] [AJAX|OPTIONS]` | play an HTTP request. The second part is POST data (`a=1&b=2`); the third part may be `AJAX` or `OPTIONS`. |
+| `RUN <command>` | Execute a shell command unchanged (no escaping; a non-zero exit code only prints a warning and does not interrupt play). It runs in the current process rather than a separate process. |
 | `CALL <class/@method [name=value]>` | Invoke a local callable object (class or function). |
 | `SETWEB <pre_curl> <pre_webcall> <post_webcall> <post_curl>` | Set curl / web hooks for subsequent `WEB` lines (`_` clears a hook). |
 | `PHASE <phase>` | Switch the DuckPHP phase (an empty value is ignored). |
@@ -278,7 +278,7 @@ public $options = [
 | Option | Default | Description |
 |---|---|---|
 | `duckcoverage_enable` | `true` | Main switch that enables DuckCoverage. |
-| `duckcoverage_callback` | `null` | Callback whose `GetTestList()` provides the replay list. |
+| `duckcoverage_callback` | `null` | Callback whose `GetTestList()` provides the play list. |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | Move the additional options file to a new location to isolate the configuration environment. |
 | `duckcoverage_reg_console_command` | `true` | Register the CLI command so that `duckcover` is available. |
 | `duckcoverage_path` | Runtime `DuckCoverage/` | Base path for dump and report directories. |
@@ -290,15 +290,15 @@ public $options = [
 | `duckcoverage_path_server` | Project root | Project path served by the built-in server. |
 | `duckcoverage_path_document` | `public` | Document root for the built-in server. |
 | `duckcoverage_homepage` | `/` | Base URI appended to the built-in server URL. |
-| `duckcoverage_new_server` | `true` | Create a new `HttpServer` instance during replay, clearing server configuration that may have been overwritten previously. |
+| `duckcoverage_new_server` | `true` | Create a new `HttpServer` instance during play, clearing server configuration that may have been overwritten previously. |
 | `duckcoverage_debug_curl_echo_back` | `false` | Show the first 200 characters of each curl response for debugging. |
 
 ## How It Works
 
 1. `--watch <group>` writes the watching marker (`runtime/DuckCoverage.watching.txt`).
 2. When a request carries an `X-MyCoverage-Name: <group>` header matching the watched group, `_OnBeforeRun` / `_OnAfterRun` (registered through `register_shutdown_function`) start/stop collection, append the request to `<group>.list`, and write coverage dumps to `test_coveragedumps/<group>/`.
-3. `--replay` reads the test list from the callback's `GetTestList()` and executes it line by line:
-   - `WEB` requests are replayed with curl against the built-in test server (or the external server configured by `duckcoverage_web_base_url`) and include the `X-MyCoverage-Name` header, so the covered code is collected again.
+3. `--play` reads the test list from the callback's `GetTestList()` and executes it line by line:
+   - `WEB` requests are played with curl against the built-in test server (or the external server configured by `duckcoverage_web_base_url`) and include the `X-MyCoverage-Name` header, so the covered code is collected again.
    - `CALL` directives directly invoke local classes or functions through reflection.
 4. `--report` merges all dumps for one or more groups and renders an HTML report under `runtime/test_reports/`.
 
@@ -357,9 +357,9 @@ Notes:
 
 The `phpunit/php-code-coverage` package is missing, or the Xdebug/PCOV driver is not loaded. See the “Requirements” and “Installation” sections.
 
-**Q: `--replay` does nothing.**
+**Q: `--play` does nothing.**
 
-Replay depends on the `GetTestList()` method returned by the `duckcoverage_callback` callback. Configure the callback first, or run a traced request to generate a `.list` file as a reference.
+play depends on the `GetTestList()` method returned by the `duckcoverage_callback` callback. Configure the callback first, or run a traced request to generate a `.list` file as a reference.
 
 **Q: The port is already in use.**
 

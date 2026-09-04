@@ -121,7 +121,7 @@ DuckCoverage 的采集、回放与出报告**全部通过命令行**的 `php cli
 
 ### 一步到位：`--go`
 
-最常用的是用 `--go <组名>` 一条命令完成整套流程（等价于 `watch → replay → stop → report`）：
+最常用的是用 `--go <组名>` 一条命令完成整套流程（等价于 `watch → play → stop → report`）：
 
 ```bash
 php cli.php duckcover --go group1
@@ -136,12 +136,12 @@ php cli.php duckcover --go group1
 
 ```bash
 php cli.php duckcover --watch group1    # ① 开始监听组 group1
-php cli.php duckcover --replay          # ② 回放回调列表（GetTestList()）中的请求/调用
+php cli.php duckcover --play          # ② 回放回调列表（GetTestList()）中的请求/调用
 php cli.php duckcover --report group1   # ③ 为该组渲染 HTML 报告
 php cli.php duckcover --stop            # ④ 停止监听
 ```
 
-- `--replay` 会启动内置测试服务器（或指向设置了 `duckcoverage_web_base_url` 的外部服务器），逐行执行回调类 `GetTestList()` 返回的测试指令；每个重放请求都会再次采集覆盖率，结束后停止服务器。
+- `--play` 会启动内置测试服务器（或指向设置了 `duckcoverage_web_base_url` 的外部服务器），逐行执行回调类 `GetTestList()` 返回的测试指令；每个重放请求都会再次采集覆盖率，结束后停止服务器。
 - `--report` 合并该组（或多个组：`--report a b c`）的所有 dump，在 `runtime/test_reports/` 下渲染 HTML 报告。
 
 ### 直接调用（不经 HTTP）
@@ -155,7 +155,7 @@ CALL MyApp\Helper::format                  # :: 表示静态调用
 CALL some_function                         # 纯函数
 ```
 
-带参数（`name=value`，按参数名匹配）：
+参数用 url_endode 编码 带参数（`name=value`，按参数名匹配, 将被 parse_str 解码）：
 
 ```text
 CALL MyApp\Test\Tester@runX parameter=d
@@ -195,15 +195,15 @@ php cli.php duckcover
 | （无参数）/ `--help` | 打印用法帮助 |
 | `--watch <组名>` | 开始监听测试组（不写组名 → 自动加时间戳）。写入 `runtime/DuckCoverage.watching.txt` |
 | `--stop` | 停止监听（移除监听标记） |
-| `--replay` | 回放回调类 `GetTestList()` 返回的测试列表 |
+| `--play` | 回放回调类 `GetTestList()` 返回的测试列表 |
 | `--report [a b c]` | 为给定组渲染 HTML 报告（默认当前监听组），打印输出路径与耗时 |
-| `--go <组名>` | 组合命令：`watch + replay + stop + report` 一步到位（CI 友好） |
+| `--go <组名>` | 组合命令：`watch + play + stop + report` 一步到位（CI 友好） |
 
 `--go group1` 相当于连续执行：
 
 ```bash
 php cli.php duckcover --watch group1
-php cli.php duckcover --replay
+php cli.php duckcover --play
 php cli.php duckcover --stop
 php cli.php duckcover --report group1
 ```
@@ -293,7 +293,7 @@ public $options = [
 
 1. `--watch <组名>` 写入监听标记（`runtime/DuckCoverage.watching.txt`）。
 2. 当请求携带与监听组一致的 `X-MyCoverage-Name: <组名>` 头时，`_OnBeforeRun` / `_OnAfterRun`（通过 `register_shutdown_function` 注册）启动/停止采集、把请求追加到 `<组名>.list`，并把覆盖率 dump 到 `test_coveragedumps/<组名>/`。
-3. `--replay` 从回调类的 `GetTestList()` 读取测试列表并逐行执行：
+3. `--play` 从回调类的 `GetTestList()` 读取测试列表并逐行执行：
    - `WEB` 请求通过 curl 对内置测试服务器（或设置了 `duckcoverage_web_base_url` 时的外部服务器）重放，请求携带 `X-MyCoverage-Name` 头，使被测代码再次采集覆盖率。
    - `CALL` 命令通过反射直接调用本地类/函数。
 4. `--report` 合并该组（或多个组）的所有 dump，在 `runtime/test_reports/` 下渲染 HTML 报告。
@@ -351,7 +351,7 @@ cd docker/test-php84
 **Q：报错 "Need CodeCoverage" 或无法创建 CodeCoverage？**
 缺少 `phpunit/php-code-coverage`，或没有加载 xdebug/pcov 驱动。见「环境要求」与「安装」。
 
-**Q：`--replay` 什么都没做？**
+**Q：`--play` 什么都没做？**
 回放依赖 `duckcoverage_callback` 的 `GetTestList()`。先配置回调类，或跑一轮带追踪头的请求产生 `.list` 作为参考。
 
 **Q：端口被占用？**

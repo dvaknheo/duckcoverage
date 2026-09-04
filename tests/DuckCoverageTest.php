@@ -34,13 +34,13 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
 
         $this->cmd("duckcover --help");
         $this->cmd("duckcover --watch");
-        $this->cmd("duckcover --replay");
+        $this->cmd("duckcover --play");
         $this->cmd("duckcover --report");
         $this->cmd("duckcover --stop");
 
         DuckCoverage::_()->options['duckcoverage_report_direct'] = true;
         $this->cmd("duckcover --watch group1");
-        $this->cmd("duckcover --replay group1");
+        $this->cmd("duckcover --play group1");
         $this->cmd("duckcover --report group1 group2");
         $this->cmd("duckcover --report group1");
         $this->cmd("duckcover --go");
