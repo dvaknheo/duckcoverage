@@ -2,10 +2,13 @@
 namespace tests\DuckCoverage;
 
 use DuckPhp\Core\SuperGlobal;
+use DuckPhp\Core\SystemWrapper;
 use DuckPhp\DuckPhp;
 use DuckCoverage\DuckCoverage;
 use DuckPhp\Core\Console;
 use LibCoverage\LibCoverage;
+use DuckPhp\Core\PhaseContainer;
+
 use Override;
 
 class DuckCoverageTest extends \PHPUnit\Framework\TestCase
@@ -64,9 +67,42 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         DuckCoverageApp::_()->serve();
 
         DuckCoverageApp::_()->testLists();
-         $_SERVER['argv'] = ['-',''];
+        $_SERVER['argv'] = ['-',''];
         DuckCoverageApp::_(new DuckCoverageApp)->init($options);
+        $this->cmd("duckcover --watch xxx");
+define('XXX',true);
+        $_SERVER['argv'] = $__SERVER['argv'];
 
+        PhaseContainer::RestAllContainerForTesting();
+        DuckCoverageApp2::_(new DuckCoverageApp2);
+        DuckCoverageApp2::_()->init($options);
+        $this->cmd("foo --go");
+        DuckCoverageApp2::exit();
+
+        PhaseContainer::RestAllContainerForTesting();
+        DuckCoverageApp2::_(new DuckCoverageApp2);
+        DuckCoverageApp2::_()->_is_cli = false;
+        $_SERVER['HTTP_X_MYCOVERAGE_NAME'] = '';
+        //$_SERVER['HTTP_X_MYCOVERAGE_NAME'] = 'name1';
+
+        $_SERVER['HTTP_X_MYCOVERAGE_BEFORERUN'] = DuckCoverageApp::class . '::beforerun';
+
+        $_SERVER['REQUEST_URI'] ='/';
+        $_POST = ['A'=>"b"];
+        DuckCoverageApp2::_()->init($options);
+        DuckCoverageApp2::_()->serve();
+        DuckCoverageApp2::exit();
+        
+        PhaseContainer::RestAllContainerForTesting();
+        DuckCoverageApp2::_(new DuckCoverageApp2);
+        DuckCoverageApp2::_()->_is_cli = false;
+        $_SERVER['HTTP_X_MYCOVERAGE_NAME'] = 'name1';
+
+        $_SERVER['REQUEST_URI'] ='/';
+        DuckCoverageApp2::_()->init($options);
+        DuckCoverageApp2::_()->serve();
+        DuckCoverageApp2::exit();
+        
 
 
         $_SERVER = $__SERVER;
@@ -81,6 +117,14 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $_SERVER['argv']=$my_argv;
         DuckCoverageApp::_()->run();
     }
+    protected function cmd2(string $str)
+    {
+        $my_argv = explode(' ', $str);
+        array_unshift($my_argv, '-');
+        $_SERVER['argv']=$my_argv;
+        DuckCoverageApp2::_()->run();
+    }
+
     protected function makeData($path)
     {
 
@@ -165,6 +209,14 @@ class DuckCoverageEx extends DuckCoverage
     {
         $this->curl_file_get_contents(['http://ai.local.com/?sleep=1',"127.0.0.1:8017"]);
     }
+    public $_is_cli = true;
+    protected function is_cli()
+    {
+        var_dump("sssssssssssssssssssssssssss");
+        var_dump($this->_is_cli);
+        return $this->_is_cli;
+    }
+
 
 }
 class DuckCoverageApp extends DuckPhp
@@ -392,4 +444,48 @@ EOT;
 
         return $str;
     }
+}
+class DuckCoverageApp2 extends DuckPhp
+{
+    protected $duckcoverage_enable =false;
+    public function _Setting($key = null, $default = null)
+    {
+        if ($key ==='duckcoverage_enable') {
+            return $this->duckcoverage_enable;
+        }
+        return parent::_Setting($key, $default);
+    }
+
+    protected static $func;
+    public static function register_shutdown_function($func)
+    {
+        static::$func = $func;
+    }
+    public static function exit()
+    {
+        if(static::$func){
+            $callback = static::$func;
+            ($callback)();
+        }
+    }
+    public function command_foo()
+    {
+        var_dump("foo");
+    }
+    public $_is_cli = true;
+    protected function onPrepare(): void
+    {
+        parent::onPrepare();
+        $this->options['cmd'] = array_merge([static::class => true], $this->options['cmd']);
+
+        SystemWrapper::system_wrapper_replace(['register_shutdown_function'=>[DuckCoverageApp2::class, 'register_shutdown_function']]);
+        $this->duckcoverage_enable = false;
+        DuckCoverage::_(DuckCoverageEx::_(new DuckCoverageEx));
+        DuckCoverage::Prepare([]);
+
+        $this->duckcoverage_enable = true;
+        DuckCoverage::_()->_is_cli = $this->_is_cli;
+        DuckCoverage::Prepare([]);
+    }
+
 }

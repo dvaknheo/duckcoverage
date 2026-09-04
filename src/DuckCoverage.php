@@ -72,10 +72,12 @@ class DuckCoverage extends ComponentBase
 
         $argv = SuperGlobal::_()->_SERVER('argv', []);
         $cmd = $argv[1] ?? '';
-        if ($cmd !== $this->default_cmd) {
-            $this->current_group = $this->watchingGetName();
+
+        if ($cmd === $this->default_cmd) {
             $this->in_subcmd = true;
         }
+        $this->current_group = $this->watchingGetName();
+
         $this->moveDateJsonFile();
 
         App::_()->options['ext'][static::class] = true;
@@ -128,19 +130,28 @@ class DuckCoverage extends ComponentBase
         }
         $this->current_name = $this->make_name();
         $this->doBegin();
+        $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');
 
         //if (PHP_SAPI === 'cli') {
         SystemWrapper::register_shutdown_function(function () {
+            $this->call_http_handler('HTTP_X_MYCOVERAGE_AFTERRUN');
             $this->doEnd();
+            $this->current_name = '';
+            $this->current_group = '';
+
         });
         // } else {
         //     Route::_()->addRouteHook([static::class, 'AfterRun'], 'finally-outter');
         // }
 
     }
+    protected function is_cli()
+    {
+        return PHP_SAPI === 'cli';
+    }
     protected function make_name()
     {
-        if (PHP_SAPI === 'cli') {
+        if ($this->is_cli()) {
             return $this->make_name_of_cli();
         } else {
             return $this->make_name_of_http();
@@ -168,10 +179,6 @@ class DuckCoverage extends ComponentBase
     }
     public function _OnBeforeRun()
     {
-        // if($this->reuse_mode){
-        //     $this->doBegin();
-        // }
-        $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');
     }
     protected function call_http_handler($name)
     {
@@ -182,15 +189,6 @@ class DuckCoverage extends ComponentBase
     }
     public function _OnAfterRun()
     {
-        //@codeCoverageIgnoreStart
-        $this->call_http_handler('HTTP_X_MYCOVERAGE_AFTERRUN');
-        if (!$this->current_group) {
-            return;
-        }
-        $this->doEnd();
-        $this->current_name = '';
-        $this->current_group = '';
-        //@codeCoverageIgnoreEnd
     }
     protected function getTestListerText()
     {
@@ -294,7 +292,7 @@ EOT;
         if (count($groups) === 1 && !$this->options['duckcoverage_report_direct']) {
             $path_report = $path_report . $groups[0] . '.report';
         } else {
-            $path_report = $path_report . $this->default_report_dir;
+            $path_report = $path_report . $this->options['duckcoverage_report_default_dir'];
         }
         $this->createReport($groups, $this->current_path_src, $this->current_path_dump, $path_report);
         $time_end = microtime(true);
@@ -725,7 +723,7 @@ trait DuckCoverage_HttpClientTrait
             foreach ($ms[1] as $i => $name) {
                 $value = trim($ms[2][$i]);
                 if ($value === '' || strcasecmp($value, 'deleted') === 0) {
-                    unset($this->cookies[$name]);
+                    unset($this->cookies[$name]); //@codeCoverageIgnore
                 } else {
                     $this->cookies[$name] = $value;
                 }
