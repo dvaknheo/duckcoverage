@@ -32,6 +32,7 @@ class DuckCoverage extends ComponentBase
         'duckcoverage_path' => '',
         'duckcoverage_path_src' => 'src/', // 需要
         'duckcoverage_report_direct' => false,
+        'duckcoverage_report_default_dir' => 'AAAAA.report',
 
         'duckcoverage_web_base_url' => '',
         // 外部服务器(如 nginx)基础 URL,如 http://admin.duckphp-local.com/ ;空则退回内部测试服务器
@@ -53,21 +54,7 @@ class DuckCoverage extends ComponentBase
     protected $in_subcmd = false;
 
     protected $default_cmd = 'duckcover';
-    protected $default_report_dir = 'AAAAA.report';
     protected $default_path = 'DuckCoverage/';
-    public function __construct()
-    {
-        $this->options = array_replace_recursive($this->options, (new parent())->options); //merge parent's options;
-        parent::__construct();
-    }
-    public static function BeforeRun()
-    {
-        return DuckCoverage::_()->_OnBeforeRun();
-    }
-    public static function AfterRun()
-    {
-        return DuckCoverage::_()->_OnAfterRun();
-    }
     public static function Prepare($options = [])
     {
         return DuckCoverage::_()->beforeInit($options);
@@ -79,7 +66,7 @@ class DuckCoverage extends ComponentBase
         if (!App::_()->isRoot()) {
             return;
         }
-        if (!App::_()->options['duckcoverage_enable']) {
+        if (!App::Setting('duckcoverage_enable', false)) {
             return;
         }
 
@@ -93,8 +80,6 @@ class DuckCoverage extends ComponentBase
 
         App::_()->options['ext'][static::class] = true;
         PhaseContainer::_()->addPublicClasses([static::class => true]);
-
-
     }
 
     protected function moveDateJsonFile()
@@ -109,7 +94,7 @@ class DuckCoverage extends ComponentBase
         if (!App::_()->isRoot()) {
             return $this;
         }
-        if (!App::_()->options['duckcoverage_enable']) {
+        if (!$this->options['duckcoverage_enable']) {
             return $this;
         }
         $path_project = App::_()->getProjectPath();

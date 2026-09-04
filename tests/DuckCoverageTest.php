@@ -178,7 +178,13 @@ class DuckCoverageApp extends DuckPhp
             //
         }
     }
-
+    public function _Setting($key = null, $default = null)
+    {
+        if ($key ==='duckcoverage_enable') {
+            return true;
+        }
+        return parent::_Setting($key, $default);
+    }
     public function isCli()
     {
         if ($this->force_not_cli){
