@@ -13,6 +13,7 @@ use DuckPhp\Core\Console;
 use DuckPhp\Core\PhaseContainer;
 use DuckPhp\Core\Route;
 use DuckPhp\Core\SuperGlobal;
+use DuckPhp\Core\SystemWrapper;
 use DuckPhp\HttpServer\HttpServer;
 use LibCoverage\GroupCoverage;
 
@@ -48,6 +49,8 @@ class DuckCoverage extends ComponentBase
     protected $current_name;
     protected $current_path_src;
     protected $current_path_dump;
+    protected $is_manual = false;
+    protected $in_subcmd = false;
 
     protected $default_cmd = 'duckcover';
     protected $default_report_dir = 'AAAAA.report';
@@ -71,32 +74,29 @@ class DuckCoverage extends ComponentBase
     }
     public function beforeInit($options = [])
     {
-        App::_()->options = array_merge($this->options, App::_()->options);
-        if (!App::_()->options['duckcoverage_enable']) {
-            return;
-        }
+        App::_()->options = array_merge($options, App::_()->options);
+
         if (!App::_()->isRoot()) {
             return;
         }
-        if ($this->inCoverageMode()) {
-            $this->moveDateJsonFile();
+        if (!App::_()->options['duckcoverage_enable']) {
+            return;
         }
+
+        $argv = SuperGlobal::_()->_SERVER('argv', []);
+        $cmd = $argv[1] ?? '';
+        if ($cmd !== $this->default_cmd) {
+            $this->current_group = $this->watchingGetName();
+            $this->in_subcmd = true;
+        }
+        $this->moveDateJsonFile();
 
         App::_()->options['ext'][static::class] = true;
         PhaseContainer::_()->addPublicClasses([static::class => true]);
+
+
     }
-    protected function inCoverageMode()
-    {
-        if (!App::_()->isCli()) {
-            return $this->checkHttp();
-        }
-        $argv = SuperGlobal::_()->_SERVER('argv', []);
-        $cmd = $argv[1] ?? '';
-        if ($cmd === $this->default_cmd) {
-            return true;
-        }
-        return false;
-    }
+
     protected function moveDateJsonFile()
     {
         App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
@@ -105,10 +105,11 @@ class DuckCoverage extends ComponentBase
     public function init(array $options, ?object $context = null)
     {
         parent::init($options, $context);
-        if (!$options['duckcoverage_enable']) {
+
+        if (!App::_()->isRoot()) {
             return $this;
         }
-        if (!App::_()->isRoot()) {
+        if (!App::_()->options['duckcoverage_enable']) {
             return $this;
         }
         $path_project = App::_()->getProjectPath();
@@ -123,41 +124,69 @@ class DuckCoverage extends ComponentBase
         $this->current_path_dump = $this->options['duckcoverage_path'];
 
         @mkdir($this->options['duckcoverage_path']);
-
         if ($this->options['duckcoverage_reg_console_command']) {
             App::_()->regConsoleCommand(static::class, 'command_');
         }
-        Route::_()->addRouteHook([static::class, 'BeforeRun'], 'prepend-outter');
-        Route::_()->addRouteHook([static::class, 'AfterRun'], 'finally-outter');
+
+        $this->initAction();
 
         return $this;
     }
-    protected function checkHttp()
+    protected function initAction()
     {
-        if (!$this->options['duckcoverage_enable']) {
-            return false;
+        if ($this->in_subcmd) {
+            return;
         }
-        if ($this->current_name && $this->current_group && !App::_()->isCli()) {
-            return true;
+        $this->current_group = $this->watchingGetName();
+        if (!$this->current_group) {
+            return;
         }
-        $client_ip = SuperGlobal::_()->_SERVER('REMOTE_ADDR', '');
-        $server_ip = SuperGlobal::_()->_SERVER('SERVER_ADDR', '');
-        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', '');
-        $group = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_GROUP', '');
-        if (($server_ip !== '127.0.0.1') || ($client_ip != $server_ip) || !$name || !$group) {
-            return false;
+        $this->current_name = $this->make_name();
+        $this->doBegin();
+
+        //if (PHP_SAPI === 'cli') {
+        SystemWrapper::register_shutdown_function(function () {
+            $this->doEnd();
+        });
+        // } else {
+        //     Route::_()->addRouteHook([static::class, 'AfterRun'], 'finally-outter');
+        // }
+
+    }
+    protected function make_name()
+    {
+        if (PHP_SAPI === 'cli') {
+            return $this->make_name_of_cli();
+        } else {
+            return $this->make_name_of_http();
         }
-        $this->current_name = $name;
-        $this->current_group = $group;
-        return true;
+    }
+    protected function make_name_of_cli()
+    {
+        $argv = SuperGlobal::_()->_SERVER('argv', []);
+        $argsOnly = array_slice($argv, 1);
+        $cmd = implode(' ', array_map('escapeshellarg', $argsOnly));
+        $request = 'MAN-RUN '.$cmd;
+        return "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
+    }
+    protected function make_name_of_http()
+    {
+        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', null);
+        if ($name) {
+            return $name;
+        }
+        $request = SuperGlobal::_()->_SERVER('REQUEST_URI', '');
+        $post = SuperGlobal::_()->_POST();
+        $request .= $post ? ''.http_build_query($post) : '';
+        $request = 'MAN-WEB '.$request;
+        return "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
     }
     public function _OnBeforeRun()
     {
-        if (!$this->checkHttp()) {
-            return;
-        }
+        // if($this->reuse_mode){
+        //     $this->doBegin();
+        // }
         $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');
-        $this->doBegin();
     }
     protected function call_http_handler($name)
     {
@@ -169,12 +198,13 @@ class DuckCoverage extends ComponentBase
     public function _OnAfterRun()
     {
         //@codeCoverageIgnoreStart
-        if (!$this->checkHttp()) {
+        $this->call_http_handler('HTTP_X_MYCOVERAGE_AFTERRUN');
+        if (!$this->current_group) {
             return;
         }
-        $this->call_http_handler('HTTP_X_MYCOVERAGE_AFTERRUN');
-
         $this->doEnd();
+        $this->current_name = '';
+        $this->current_group = '';
         //@codeCoverageIgnoreEnd
     }
     protected function getTestListerText()
@@ -622,7 +652,6 @@ trait DuckCoverage_HttpClientTrait
     protected function prepareCurl($ch)
     {
         $this->headers[] = 'X-MyCoverage-Name: ' . $this->current_name;
-        $this->headers[] = 'X-MyCoverage-Group: ' . $this->current_group;
         if ($this->pre_webcall) {
             $this->headers[] = 'X-MyCoverage-BeforeRun: ' . $this->pre_webcall;
             $this->pre_webcall = null;
@@ -676,7 +705,7 @@ trait DuckCoverage_HttpClientTrait
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1); // @phpstan-ignore-line argument.type
         //curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
 
-        // 始终抓取响应头，以收集/更新所有 Set-Cookie
+        // replace all Set-Cookie
         curl_setopt($ch, CURLOPT_HEADER, 1); // @phpstan-ignore-line argument.type
 
         if (!empty($post)) {
@@ -684,7 +713,6 @@ trait DuckCoverage_HttpClientTrait
             curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
         }
         /////////
-        // 连续传递所有已收集的 cookie（不再只传 PHPSESSID）
         if (!empty($this->cookies)) {
             $cookie_str = [];
             foreach ($this->cookies as $name => $value) {
@@ -705,7 +733,6 @@ trait DuckCoverage_HttpClientTrait
         }
 
         $this->headers = [];
-        // 收集响应中的所有 Set-Cookie，同名覆盖（空值/deleted 移除）
         $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
         $headers = substr((string) $data, 0, $header_size);
         $data = substr((string) $data, $header_size);
@@ -713,7 +740,7 @@ trait DuckCoverage_HttpClientTrait
             foreach ($ms[1] as $i => $name) {
                 $value = trim($ms[2][$i]);
                 if ($value === '' || strcasecmp($value, 'deleted') === 0) {
-                    //unset($this->cookies[$name]);
+                    unset($this->cookies[$name]);
                 } else {
                     $this->cookies[$name] = $value;
                 }

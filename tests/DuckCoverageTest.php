@@ -131,7 +131,7 @@ class DuckCoverageEx extends DuckCoverage
     public $stop = false;
     public function checkHttp()
     {
-        return parent::checkHttp();
+        return ;//parent::checkHttp();
     }
     public function cleanName()
     {
