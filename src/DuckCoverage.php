@@ -55,6 +55,7 @@ class DuckCoverage extends ComponentBase
 
     protected $default_cmd = 'duckcover';
     protected $default_path = 'DuckCoverage/';
+    protected $url_base = '';
     public static function Prepare($options = [])
     {
         return DuckCoverage::_()->beforeInit($options);
@@ -65,6 +66,9 @@ class DuckCoverage extends ComponentBase
 
         if (!App::_()->isRoot()) {
             return;
+        }
+        if (App::_()->options['duckcoverage_reg_console_command'] ?? true) {
+            App::_()->regConsoleCommand(static::class, 'command_');
         }
         if (!App::Setting('duckcoverage_enable', false)) {
             return;
@@ -79,11 +83,10 @@ class DuckCoverage extends ComponentBase
         $this->current_group = $this->watchingGetName();
 
         $this->moveDateJsonFile();
-        SystemWrapper::header("X-MYCOVERAGE_RUNNING: {$this->current_group}");
-        SystemWrapper::header("X-MYCOVERAGE_JSONFILE: {$this->options['duckcoverage_data_file_json_file']}");
+        SystemWrapper::header("x-duckcoverage-datafile: {$this->options['duckcoverage_data_file_json_file']}");
         if($this->is_cli()){
             echo "\033[41;30m";
-            echo "DuckCoverage running: GROUP: {$this->current_group}; JSON_FILE: {$this->options['duckcoverage_data_file_json_file']}";
+            echo "DuckCoverage running: JSON_FILE: {$this->options['duckcoverage_data_file_json_file']}";
             echo "\033[0m\n";
         }
 
@@ -118,10 +121,15 @@ class DuckCoverage extends ComponentBase
         $this->current_path_dump = $this->options['duckcoverage_path'];
 
         @mkdir($this->options['duckcoverage_path']);
-        if ($this->options['duckcoverage_reg_console_command']) {
-            App::_()->regConsoleCommand(static::class, 'command_');
-        }
+        // if ($this->options['duckcoverage_reg_console_command']) {
+        //     App::_()->regConsoleCommand(static::class, 'command_');
+        // }
+        $this->current_group = $this->watchingGetName();
+        SystemWrapper::header("x-duckcoverage-group: {$this->current_group}");
 
+        echo "\033[41;30m";
+        echo "DuckCoverage GROUP $this->current_group";
+        echo "\033[0m\n";
         $this->initAction();
 
         return $this;
@@ -131,10 +139,10 @@ class DuckCoverage extends ComponentBase
         if ($this->in_subcmd) {
             return;
         }
-        $this->current_group = $this->watchingGetName();
         if (!$this->current_group) {
             return;
         }
+
         $this->current_name = $this->make_name();
 
         //if (PHP_SAPI === 'cli') {
@@ -210,9 +218,9 @@ class DuckCoverage extends ComponentBase
     protected function play()
     {
         $this->cleanClientStatus();
+        $this->url_base = __url('');
         $test_list = $this->getTestListerText();
         $test_list = \explode("\n", $test_list);
-        $this->current_group = $this->watchingGetName();
         foreach ($test_list as $line) {
             $this->readCommand($line);
         }
@@ -227,7 +235,14 @@ class DuckCoverage extends ComponentBase
     }
     public function doCommand()
     {
+        if (!App::Setting('duckcoverage_enable', false)) {
+            echo "\033[41;30m";
+            echo "turn on setting to work: 'duckcoverage_enable'";
+            echo "\033[0m\n";
+            return;
+        }
         @mkdir($this->current_path_dump);
+
         $p = Console::_()->getCliParameters();
 
         if (($p['help'] ?? false) || (count($p) === 1)) {
@@ -255,8 +270,9 @@ EOT;
             $this->watchingEnd();
         }
         if ($p['play'] ?? false) {
+            echo "playing\n";
             $this->play();
-            echo "playing";
+            echo "played\n";
         }
 
         if ($p['report'] ?? false) {
@@ -348,6 +364,8 @@ trait DuckCoverage_CommandTrait
         if (empty($request)) {
             return;
         }
+        echo "\n\033[42;30m".$request."\033[0m\n";
+
         $argv = explode(" ", $request);
         $this->current_name = "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
         $cmd = array_shift($argv);
@@ -358,8 +376,6 @@ trait DuckCoverage_CommandTrait
         } else {
             echo "Bad Request: $request\n";
         }
-        echo $request;
-        echo "\n";
     }
     protected function explainComment(array $argv)
     {
@@ -374,6 +390,7 @@ trait DuckCoverage_CommandTrait
     {
         @list($uri, $poststr, $method) = $argv;
         $uri = __url($uri);
+        $uri = substr($uri, strlen($this->url_base)-1);
 
         $base_url = (string) ($this->options['duckcoverage_web_base_url'] ?? '');
         if ($base_url === '') {
@@ -390,8 +407,12 @@ trait DuckCoverage_CommandTrait
 
         $url = rtrim($base_url, '/') . $uri;
 
-        $data = $this->curl_file_get_contents($url, $post, $is_ajax, $is_options, $method);
 
+        echo "explainWeb: ".$url;
+        echo ' ';
+        echo http_build_query($post);
+        echo "\n";
+        $data = $this->curl_file_get_contents($url, $post, $is_ajax, $is_options, $method);
         if ($this->options['duckcoverage_debug_curl_echo_back'] ?? false) {
             echo substr($data, 0, 200);
         }
@@ -726,11 +747,6 @@ trait DuckCoverage_HttpClientTrait
             }
         }
         $this->postpareCurl($ch);
-        echo $url;
-        echo ' ';
-        echo http_build_query($post);
-        echo "\n";
-        echo $data;
         curl_close($ch);
         $data = (string) $data;
         return $data;

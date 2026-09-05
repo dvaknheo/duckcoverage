@@ -106,6 +106,8 @@ define('XXX',true);
         DuckCoverage::_()->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');
         DuckCoverageEx::_()->watchingEnd();
         DuckCoverageEx::_()->init($options);
+        DuckCoverageApp2::_()->duckcoverage_enable=false;
+        DuckCoverageEx::_()->doCommand();
 
         $_SERVER = $__SERVER;
         LibCoverage::_($old);
@@ -448,7 +450,7 @@ EOT;
 }
 class DuckCoverageApp2 extends DuckPhp
 {
-    protected $duckcoverage_enable =false;
+    public $duckcoverage_enable =false;
     public function _Setting($key = null, $default = null)
     {
         if ($key ==='duckcoverage_enable') {
