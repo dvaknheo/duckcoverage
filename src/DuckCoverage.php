@@ -129,21 +129,17 @@ class DuckCoverage extends ComponentBase
             return;
         }
         $this->current_name = $this->make_name();
-        $this->doBegin();
-        $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');
 
         //if (PHP_SAPI === 'cli') {
         SystemWrapper::register_shutdown_function(function () {
-            $this->call_http_handler('HTTP_X_MYCOVERAGE_AFTERRUN');
-            $this->doEnd();
+            $this->call_http_handler('HTTP_X_MYCOVERAGE_AFTERRUN');     // @codeCoverageIgnore
+            $this->doEnd();                                             // @codeCoverageIgnore
             $this->current_name = '';
             $this->current_group = '';
 
         });
-        // } else {
-        //     Route::_()->addRouteHook([static::class, 'AfterRun'], 'finally-outter');
-        // }
-
+        $this->doBegin();
+        $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');        // @codeCoverageIgnore
     }
     protected function is_cli()
     {
@@ -177,18 +173,12 @@ class DuckCoverage extends ComponentBase
         $request = 'MAN-WEB '.$request;
         return "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
     }
-    public function _OnBeforeRun()
-    {
-    }
     protected function call_http_handler($name)
     {
         $runner = SuperGlobal::_()->_SERVER($name, '');
         if ($runner) {
             $this->callHandler($runner);
         }
-    }
-    public function _OnAfterRun()
-    {
     }
     protected function getTestListerText()
     {
@@ -226,12 +216,13 @@ class DuckCoverage extends ComponentBase
      */
     public function command_duckcover()
     {
+        return $this->doCommand();
+    }
+    public function doCommand()
+    {
         @mkdir($this->current_path_dump);
         $p = Console::_()->getCliParameters();
-        $this->doCommand($p);
-    }
-    protected function doCommand($p)
-    {
+
         if (($p['help'] ?? false) || (count($p) === 1)) {
             $str = <<<EOT
 --watch {group}
@@ -370,9 +361,7 @@ trait DuckCoverage_CommandTrait
     protected function explainPhase(array $argv)
     {
         $param = $argv[0];
-        $this->doBegin();
         App::Phase($param);
-        $this->doEnd();
     }
     protected function explainWeb(array $argv)
     {

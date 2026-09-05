@@ -102,8 +102,10 @@ define('XXX',true);
         DuckCoverageApp2::_()->init($options);
         DuckCoverageApp2::_()->serve();
         DuckCoverageApp2::exit();
-        
-
+        $_SERVER['HTTP_X_MYCOVERAGE_BEFORERUN'] = DuckCoverageApp::class . '::beforerun';
+        DuckCoverage::_()->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');
+        DuckCoverageEx::_()->watchingEnd();
+        DuckCoverageEx::_()->init($options);
 
         $_SERVER = $__SERVER;
         LibCoverage::_($old);
@@ -216,7 +218,14 @@ class DuckCoverageEx extends DuckCoverage
         var_dump($this->_is_cli);
         return $this->_is_cli;
     }
-
+    public function call_http_handler($name)
+    {
+        return parent::call_http_handler($name);
+    }
+    public function watchingEnd()
+    {
+        return parent::watchingEnd();
+    }
 
 }
 class DuckCoverageApp extends DuckPhp
@@ -400,13 +409,7 @@ global $time_start;var_dump(microtime(true)-$time_start);
         DuckCoverageEx::_()->testRunServer();
 
 
-        DuckCoverageEx::_()->options['duckcoverage_enable'] = true;
-        DuckCoverageEx::_()->checkHttp();
 
-        DuckCoverageEx::_()->options['duckcoverage_enable'] =false;
-        DuckCoverageEx::_()->_OnBeforeRun();
-        DuckCoverageEx::_()->options['duckcoverage_enable'] = true;
-        DuckCoverageEx::_()->stop = false;
     }
     private function str_replace_first(string $search, string $replace, string $subject): string
     {
@@ -440,8 +443,6 @@ class DuckCoverageTestList
 COMMENT just a test
 
 EOT;
-
-
         return $str;
     }
 }
@@ -486,6 +487,15 @@ class DuckCoverageApp2 extends DuckPhp
         $this->duckcoverage_enable = true;
         DuckCoverage::_()->_is_cli = $this->_is_cli;
         DuckCoverage::Prepare([]);
+        (new JustDuckCoverageCli)->is_cli();
     }
 
+}
+
+class JustDuckCoverageCli extends DuckCoverage
+{
+    public function is_cli()
+    {
+        return parent::is_cli();
+    }
 }
