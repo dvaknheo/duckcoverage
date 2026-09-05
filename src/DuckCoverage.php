@@ -79,6 +79,13 @@ class DuckCoverage extends ComponentBase
         $this->current_group = $this->watchingGetName();
 
         $this->moveDateJsonFile();
+        SystemWrapper::header("X-MYCOVERAGE_RUNNING: {$this->current_group}");
+        SystemWrapper::header("X-MYCOVERAGE_JSONFILE: {$this->options['duckcoverage_data_file_json_file']}");
+        if($this->is_cli()){
+            echo "\033[41;30m";
+            echo "DuckCoverage running: GROUP: {$this->current_group}; JSON_FILE: {$this->options['duckcoverage_data_file_json_file']}";
+            echo "\033[0m\n";
+        }
 
         App::_()->options['ext'][static::class] = true;
         PhaseContainer::_()->addPublicClasses([static::class => true]);
