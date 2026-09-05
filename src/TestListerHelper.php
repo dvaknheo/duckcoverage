@@ -111,7 +111,7 @@ class TestListerHelper
             $uri = $route['url'] ?? '';
             $list[] = "WEB {$uri}";
         }
-        return implode("\n", $list);
+        return implode("\n", $list)."\n";
     }
     public function genTestListOfCommands()
     {
@@ -138,7 +138,7 @@ class TestListerHelper
                 $list[] = "RUN {$command}";
             }
         }
-        return implode("\n", $list);
+        return implode("\n", $list)."\n";
     }
     public function genTestListOfComponents($components = ['Business', 'Model'])
     {
@@ -179,7 +179,7 @@ class TestListerHelper
             $component_namespace = $prefix . $component;
             $list = array_merge($list, $this->getComponentCalls($component_dir, $component_namespace, $component_dir));
         }
-        return implode("\n", $list);
+        return implode("\n", $list)."\n";
     }
     protected function getComponentCalls($dir, $namespace_prefix, $base_dir)
     {
@@ -240,7 +240,7 @@ class TestListerHelper
         $list .= $this->genTestListOfRoutes();
         $list .= $this->genTestListOfComponents();
         $list .= "\n";
-        return;
+        return $list;
     }
     // protected function get_component_path($component,$base_file = 'Base')
     // {
