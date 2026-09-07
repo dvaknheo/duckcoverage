@@ -724,10 +724,10 @@ trait DuckCoverage_HttpClientTrait
             curl_setopt($ch, CURLOPT_COOKIE, implode('; ', $cookie_str));
         }
 
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
         curl_setopt($ch, CURLOPT_TIMEOUT, 5);
         $this->prepareCurl($ch);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
         $data = curl_exec($ch);
         if (curl_errno($ch) === CURLE_OPERATION_TIMEDOUT) {
             echo "curl_file_get_contents timeout";
