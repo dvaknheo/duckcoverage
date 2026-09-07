@@ -125,11 +125,6 @@ class DuckCoverage extends ComponentBase
         //     App::_()->regConsoleCommand(static::class, 'command_');
         // }
         $this->current_group = $this->watchingGetName();
-        SystemWrapper::header("x-duckcoverage-group: {$this->current_group}");
-
-        echo "\033[41;30m";
-        echo "DuckCoverage GROUP $this->current_group";
-        echo "\033[0m\n";
         $this->initAction();
 
         return $this;
@@ -142,7 +137,13 @@ class DuckCoverage extends ComponentBase
         if (!$this->current_group) {
             return;
         }
+        SystemWrapper::header("x-duckcoverage-group: {$this->current_group}");
 
+        if (App::_()->isCli()) {
+            echo "\033[41;30m";
+            echo "DuckCoverage GROUP $this->current_group";
+            echo "\033[0m\n";
+        }
         $this->current_name = $this->make_name();
 
         //if (PHP_SAPI === 'cli') {
@@ -292,9 +293,10 @@ EOT;
             $this->watchingBegin($watch_name);
             echo "watching {$watch_name}\n";
             $this->play();
+            echo "reporting...\n";
+            $this->doReport([$watch_name]);
             $this->watchingEnd();
             echo "watched {$watch_name}\n";
-            $this->doReport([$watch_name]);
         }
     }
     protected function doReport($groups)

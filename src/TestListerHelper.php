@@ -219,7 +219,7 @@ class TestListerHelper
     }
     protected function getCallParams(\ReflectionMethod $method)
     {
-        $str = '';
+        $ret = [];
         foreach ($method->getParameters() as $param) {
             $default = null;
             if ($param->isDefaultValueAvailable()) {
@@ -228,9 +228,9 @@ class TestListerHelper
             } else {
                 $default = '';
             }
-            $str .= ' '.$param->getName().'='.$default;
+            $ret[$param->getName()] = $default;
         }
-        return $str;
+        return empty($ret)?'':' '.http_build_query($ret);
     }
 
     public function genTestListOfAll()
