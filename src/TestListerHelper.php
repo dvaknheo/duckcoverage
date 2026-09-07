@@ -40,6 +40,7 @@ class TestListerHelper
         $list = explode("\n", $list);
         $ret = [];
         foreach ($list as $line) {
+            $line = rtrim($line);
             if ($line === '#PHASE_BEGIN') {
                 $ret[] = $this->doPhaseBegin();
             } elseif ($line === '#PHASE_END') {
@@ -72,7 +73,7 @@ class TestListerHelper
     protected function doIncludeChild(string $line)
     {
         [$_default, $child_app] = explode(" ", $line);
-        return $this->getChildList($child_app);
+        return "COMMENT APP $child_app\n".$this->getChildList($child_app);
     }
     // public function replaceLineStart(string $content, array $rules): string
     // {
