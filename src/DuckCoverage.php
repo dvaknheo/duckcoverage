@@ -59,15 +59,19 @@ class DuckCoverage extends ComponentBase
     public $route_hook_mode = false;
     public static function BeforeRun()
     {
-        return DuckCoverage::_()->_OnBeforeRun();
+        return static::_()->_OnBeforeRun();
     }
     public static function AfterRun()
     {
-        return DuckCoverage::_()->_OnAfterRun();
+        return static::_()->_OnAfterRun();
     }
     public static function Prepare($options = [])
     {
-        return DuckCoverage::_()->beforeInit($options);
+        return static::_()->beforeInit($options);
+    }
+    public static function InitedThenGoRouteHookMode()
+    {
+        return static::_()->runWithRouteHookMode();
     }
     public function beforeInit($options = [])
     {
@@ -158,16 +162,16 @@ class DuckCoverage extends ComponentBase
         //if (PHP_SAPI === 'cli') {
         SystemWrapper::register_shutdown_function(function () {
             if ($this->route_hook_mode){
-                return;
+                return;                                                     // @codeCoverageIgnore
             }
-            $this->call_http_handler('HTTP_X_DUCKCOVERAGE_AFTERRUN');     // @codeCoverageIgnore
+            $this->call_http_handler('HTTP_X_DUCKCOVERAGE_AFTERRUN');   // @codeCoverageIgnore
             $this->doEnd();                                             // @codeCoverageIgnore
             $this->current_name = '';
             $this->current_group = '';
 
         });
         $this->doBegin();
-        $this->call_http_handler('HTTP_X_DUCKCOVERAGE_BEFORERUN');        // @codeCoverageIgnore
+        $this->call_http_handler('HTTP_X_DUCKCOVERAGE_BEFORERUN');      // @codeCoverageIgnore
     }
     public function runWithRouteHookMode()
     {
@@ -189,7 +193,7 @@ class DuckCoverage extends ComponentBase
         }
         $this->current_name = $this->make_name_of_http();
         $this->doBegin();
-        $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');
+        $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');// @codeCoverageIgnore
     }
 
     public function _OnAfterRun()

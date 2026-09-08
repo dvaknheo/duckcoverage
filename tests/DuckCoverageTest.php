@@ -55,10 +55,10 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         DuckCoverageApp::_(new DuckCoverageApp);
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
         $_SERVER['SERVER_ADDR'] = '127.0.0.1';
-        $_SERVER['HTTP_X_MYCOVERAGE_GROUP'] = 'group1';
-        $_SERVER['HTTP_X_MYCOVERAGE_NAME'] = 'name1';
-        $_SERVER['HTTP_X_MYCOVERAGE_BEFORERUN'] = DuckCoverageApp::class . '::beforerun';
-        $_SERVER['HTTP_X_MYCOVERAGE_AFTERRUN'] = DuckCoverageApp::class . '::afterrun';
+        $_SERVER['HTTP_X_DUCKCOVERAGE_GROUP'] = 'group1';
+        $_SERVER['HTTP_X_DUCKCOVERAGE_NAME'] = 'name1';
+        $_SERVER['HTTP_X_DUCKCOVERAGE_BEFORERUN'] = DuckCoverageApp::class . '::beforerun';
+        $_SERVER['HTTP_X_DUCKCOVERAGE_AFTERRUN'] = DuckCoverageApp::class . '::afterrun';
         $_SERVER['REQUEST_URI'] ='/';
         $_SERVER['PATH_INFO'] ='';
         DuckCoverageApp::_()->force_not_cli = true;
@@ -82,10 +82,10 @@ define('XXX',true);
         PhaseContainer::RestAllContainerForTesting();
         DuckCoverageApp2::_(new DuckCoverageApp2);
         DuckCoverageApp2::_()->_is_cli = false;
-        $_SERVER['HTTP_X_MYCOVERAGE_NAME'] = '';
-        //$_SERVER['HTTP_X_MYCOVERAGE_NAME'] = 'name1';
+        $_SERVER['HTTP_X_DUCKCOVERAGE_NAME'] = '';
+        //$_SERVER['HTTP_X_DUCKCOVERAGE_NAME'] = 'name1';
 
-        $_SERVER['HTTP_X_MYCOVERAGE_BEFORERUN'] = DuckCoverageApp::class . '::beforerun';
+        $_SERVER['HTTP_X_DUCKCOVERAGE_BEFORERUN'] = DuckCoverageApp::class . '::beforerun';
 
         $_SERVER['REQUEST_URI'] ='/';
         $_POST = ['A'=>"b"];
@@ -96,19 +96,33 @@ define('XXX',true);
         PhaseContainer::RestAllContainerForTesting();
         DuckCoverageApp2::_(new DuckCoverageApp2);
         DuckCoverageApp2::_()->_is_cli = false;
-        $_SERVER['HTTP_X_MYCOVERAGE_NAME'] = 'name1';
+        $_SERVER['HTTP_X_DUCKCOVERAGE_NAME'] = 'name1';
 
         $_SERVER['REQUEST_URI'] ='/';
         DuckCoverageApp2::_()->init($options);
         DuckCoverageApp2::_()->serve();
         DuckCoverageApp2::exit();
-        $_SERVER['HTTP_X_MYCOVERAGE_BEFORERUN'] = DuckCoverageApp::class . '::beforerun';
-        DuckCoverage::_()->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');
+        $_SERVER['HTTP_X_DUCKCOVERAGE_BEFORERUN'] = DuckCoverageApp::class . '::beforerun';
+        DuckCoverage::_()->call_http_handler('HTTP_X_DUCKCOVERAGE_BEFORERUN');
         DuckCoverageEx::_()->watchingEnd();
         DuckCoverageEx::_()->init($options);
         DuckCoverageApp2::_()->duckcoverage_enable=false;
         DuckCoverageEx::_()->doCommand();
+        /////////////
+        PhaseContainer::RestAllContainerForTesting();
 
+        $_SERVER['REQUEST_URI'] ='/';
+        DuckCoverageApp2::_()->init($options);
+        DuckCoverageEx::InitedThenGoRouteHookMode();
+        DuckCoverageApp2::_()->serve();
+        DuckCoverageApp2::exit();
+        DuckCoverageEx::_()->watchingBegin("g1");
+        DuckCoverageApp2::_()->serve();
+        DuckCoverageEx::_()->route_hook_mode = false;
+        DuckCoverageApp2::_()->serve();
+
+
+        ///////////////
         $_SERVER = $__SERVER;
         LibCoverage::_($old);
         LibCoverage::_()->cleanDirectory($path);
@@ -185,6 +199,10 @@ class DuckCoverageEx extends DuckCoverage
     {
         $this->current_group = "";
         $this->current_name = "";
+    }
+    public function watchingBegin($name)
+    {
+        return parent::watchingBegin($name);
     }
     #[Override]
     public function doBegin()
@@ -466,6 +484,7 @@ class DuckCoverageApp2 extends DuckPhp
     }
     public static function exit()
     {
+        var_dump("exit!");
         if(static::$func){
             $callback = static::$func;
             ($callback)();
