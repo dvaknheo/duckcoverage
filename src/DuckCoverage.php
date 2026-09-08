@@ -148,14 +148,14 @@ class DuckCoverage extends ComponentBase
 
         //if (PHP_SAPI === 'cli') {
         SystemWrapper::register_shutdown_function(function () {
-            $this->call_http_handler('HTTP_X_MYCOVERAGE_AFTERRUN');     // @codeCoverageIgnore
+            $this->call_http_handler('HTTP_X_DUCKCOVERAGE_AFTERRUN');     // @codeCoverageIgnore
             $this->doEnd();                                             // @codeCoverageIgnore
             $this->current_name = '';
             $this->current_group = '';
 
         });
         $this->doBegin();
-        $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');        // @codeCoverageIgnore
+        $this->call_http_handler('HTTP_X_DUCKCOVERAGE_BEFORERUN');        // @codeCoverageIgnore
     }
     protected function is_cli()
     {
@@ -179,7 +179,7 @@ class DuckCoverage extends ComponentBase
     }
     protected function make_name_of_http()
     {
-        $name = SuperGlobal::_()->_SERVER('HTTP_X_MYCOVERAGE_NAME', null);
+        $name = SuperGlobal::_()->_SERVER('HTTP_X_DUCKCOVERAGE_NAME', null);
         if ($name) {
             return $name;
         }
@@ -653,13 +653,13 @@ trait DuckCoverage_HttpClientTrait
 
     protected function prepareCurl($ch)
     {
-        $this->headers[] = 'X-MyCoverage-Name: ' . $this->current_name;
+        $this->headers[] = 'X-DuckCoverage-Name: ' . $this->current_name;
         if ($this->pre_webcall) {
-            $this->headers[] = 'X-MyCoverage-BeforeRun: ' . $this->pre_webcall;
+            $this->headers[] = 'X-DuckCoverage-BeforeRun: ' . $this->pre_webcall;
             $this->pre_webcall = null;
         }
         if ($this->post_webcall) {
-            $this->headers[] = 'X-MyCoverage-AfterRun: ' . $this->post_webcall;
+            $this->headers[] = 'X-DuckCoverage-AfterRun: ' . $this->post_webcall;
             $this->post_webcall = null;
         }
         $pre_curl = $this->pre_curl;
