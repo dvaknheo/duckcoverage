@@ -35,18 +35,18 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $_SERVER['argv'] = ['-','duckcover'];
         DuckCoverageApp::_()->init($options);
 
-        $this->cmd("duckcover --help");
-        $this->cmd("duckcover --watch");
-        $this->cmd("duckcover --play");
-        $this->cmd("duckcover --report");
-        $this->cmd("duckcover --stop");
+        $this->cmd("cover --help");
+        $this->cmd("cover --watch");
+        $this->cmd("cover --play");
+        $this->cmd("cover --report");
+        $this->cmd("cover --stop");
 
         DuckCoverage::_()->options['duckcoverage_report_direct'] = true;
-        $this->cmd("duckcover --watch group1");
-        $this->cmd("duckcover --play group1");
-        $this->cmd("duckcover --report group1 group2");
-        $this->cmd("duckcover --report group1");
-        $this->cmd("duckcover --go");
+        $this->cmd("cover --watch group1");
+        $this->cmd("cover --play group1");
+        $this->cmd("cover --report group1 group2");
+        $this->cmd("cover --report group1");
+        $this->cmd("cover --go");
 
         DuckCoverageApp::_()->testMore();
 
@@ -69,8 +69,7 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         DuckCoverageApp::_()->testLists();
         $_SERVER['argv'] = ['-',''];
         DuckCoverageApp::_(new DuckCoverageApp)->init($options);
-        $this->cmd("duckcover --watch xxx");
-define('XXX',true);
+        $this->cmd("cover --watch xxx");
         $_SERVER['argv'] = $__SERVER['argv'];
 
         PhaseContainer::RestAllContainerForTesting();

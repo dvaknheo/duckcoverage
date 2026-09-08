@@ -53,7 +53,7 @@ class DuckCoverage extends ComponentBase
     protected $is_manual = false;
     protected $in_subcmd = false;
 
-    protected $default_cmd = 'duckcover';
+    protected $default_cmd = 'cover';
     protected $default_path = 'DuckCoverage/';
     protected $url_base = '';
     public $route_hook_mode = false;
@@ -277,7 +277,7 @@ class DuckCoverage extends ComponentBase
     /**
      * tests group. use --help for more.
      */
-    public function command_duckcover()
+    public function command_cover()
     {
         return $this->doCommand();
     }
