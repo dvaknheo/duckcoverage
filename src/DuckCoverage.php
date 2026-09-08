@@ -56,6 +56,15 @@ class DuckCoverage extends ComponentBase
     protected $default_cmd = 'duckcover';
     protected $default_path = 'DuckCoverage/';
     protected $url_base = '';
+    public $route_hook_mode = false;
+    public static function BeforeRun()
+    {
+        return DuckCoverage::_()->_OnBeforeRun();
+    }
+    public static function AfterRun()
+    {
+        return DuckCoverage::_()->_OnAfterRun();
+    }
     public static function Prepare($options = [])
     {
         return DuckCoverage::_()->beforeInit($options);
@@ -148,6 +157,9 @@ class DuckCoverage extends ComponentBase
 
         //if (PHP_SAPI === 'cli') {
         SystemWrapper::register_shutdown_function(function () {
+            if ($this->route_hook_mode){
+                return;
+            }
             $this->call_http_handler('HTTP_X_DUCKCOVERAGE_AFTERRUN');     // @codeCoverageIgnore
             $this->doEnd();                                             // @codeCoverageIgnore
             $this->current_name = '';
@@ -156,6 +168,37 @@ class DuckCoverage extends ComponentBase
         });
         $this->doBegin();
         $this->call_http_handler('HTTP_X_DUCKCOVERAGE_BEFORERUN');        // @codeCoverageIgnore
+    }
+    public function runWithRouteHookMode()
+    {
+        $this->route_hook_mode = true;
+        $this->doEnd();
+        $this->current_name = '';
+        $this->current_group = '';
+        Route::_()->addRouteHook([static::class, 'BeforeRun'], 'prepend-outter');
+        Route::_()->addRouteHook([static::class, 'AfterRun'], 'finally-outter');    
+    }
+    public function _OnBeforeRun()
+    {
+        if (!$this->route_hook_mode){
+            return;
+        }
+        $this->current_group = $this->watchingGetName();
+        if(!$this->current_group){
+            return;
+        }
+        $this->current_name = $this->make_name_of_http();
+        $this->doBegin();
+        $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');
+    }
+
+    public function _OnAfterRun()
+    {
+        if (!$this->route_hook_mode){
+            return;
+        }
+        $this->call_http_handler('HTTP_X_MYCOVERAGE_AFTERRUN');
+        $this->doEnd();
     }
     protected function is_cli()
     {
