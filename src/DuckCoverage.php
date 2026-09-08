@@ -515,7 +515,7 @@ trait DuckCoverage_CommandTrait
         @list($handler, $parameters) = explode(' ', $handler);
         $phase = null;
         if (($pos = strpos($handler, '!')) !== false) {
-            $phase = (string)substr($handler, 0, $pos + 1);
+            $phase = (string)substr($handler, 0, $pos);
             $handler = (string)substr($handler, $pos + 1);
         }
 
