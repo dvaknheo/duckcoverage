@@ -49,8 +49,6 @@ class TestListerHelper
                 $ret[] = $this->doIncludeCall($line);
             } elseif (substr($line, 0, strlen('#INCLUDE_CHILD ')) === '#INCLUDE_CHILD ') {
                 $ret[] = $this->doIncludeChild($line);
-            } elseif (substr($line, 0, strlen('#COMPONENT ')) === '#COMPONENT ') {
-                $ret[] = $this->doIncludeComponent($line, '#COMPONENT ', '');
             } elseif (substr($line, 0, strlen('#BUSINESS ')) === '#BUSINESS ') {
                 $ret[] = $this->doIncludeComponent($line, '#BUSINESS ', 'Business\\');
             } elseif (substr($line, 0, strlen('#MODEL ')) === '#MODEL ') {
@@ -83,13 +81,11 @@ class TestListerHelper
         [$_default, $child_app] = explode(" ", $line);
         return "COMMENT APP $child_app\n".$this->getChildList($child_app);
     }
-    protected function doIncludeComponent(string $line,string $old_cmd,string $new_prefix ='')
+    protected function doIncludeComponent(string $line, string $old_cmd, string $new_prefix = '')
     {
         $prefix = 'CALL '. App::Phase().'!'.App::_()->options['namespace']."\\".$new_prefix;
-        return substr_replace($line, $prefix, 0, strlen($old_cmd));;
+        return substr_replace($line, $prefix, 0, strlen($old_cmd));
     }
-
-
 
     public function genTestListOfRoutes()
     {
@@ -128,7 +124,7 @@ class TestListerHelper
         }
         return implode("\n", $list)."\n";
     }
-    public function genTestListOfComponents($components = ['Business', 'Model'])
+    public function genTestListOfComponents()
     {
         $class = App::_()->getThisClassName();
         $reflect = new \ReflectionClass($class);
@@ -139,68 +135,46 @@ class TestListerHelper
         }
 
         $namespace = trim((string) App::_()->options['namespace'], '\\');
-        $prefix = $namespace === '' ? '' : $namespace . '\\';
-        if ($namespace !== '' && strpos($class . '\\', $prefix) !== 0) {
-            throw new \LogicException("App->getThisClassName() '{$class}' is not under namespace '{$namespace}'"); //@codeCoverageIgnore
-        }
 
-        $relative_class = $namespace === '' ? $class : substr($class, strlen($prefix));
-        $base_path = dirname($filename) . DIRECTORY_SEPARATOR;
-        $base_dir = rtrim($base_path, '/\\') . DIRECTORY_SEPARATOR;
-        $base_dir = preg_replace('#(?:^|[/\\\\])System/?$#', DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR, $base_dir);
-        if (is_dir($base_dir . 'Business') === false) {
-            $base_dir = rtrim(dirname($base_dir), '/\\') . DIRECTORY_SEPARATOR;
-        }
-
+        $base_path = substr($filename, 0, 0 - (strlen($class) - strlen($namespace) - 1 + strlen('.php')));
         $list = [];
-        foreach ($components as $component) {
-            $component = trim((string) $component, '/\\');
-            if ($component === '') {
-                continue; //@codeCoverageIgnore
-            }
-
-            $component_dir = $base_dir . $component . DIRECTORY_SEPARATOR;
-            if (!is_dir($component_dir)) {
-                continue; //@codeCoverageIgnore
-            }
-
-            $component_namespace = $prefix . $component;
-            $list = array_merge($list, $this->getComponentCalls($component_dir, $component_namespace, $component_dir));
-        }
+        $list = array_merge($list, $this->getComponentCalls($base_path, $namespace, 'Business'));
+        $list = array_merge($list, $this->getComponentCalls($base_path, $namespace, 'Model'));
         return implode("\n", $list)."\n";
     }
-    protected function getComponentCalls($dir, $namespace_prefix, $base_dir)
+    protected function getComponentCalls($base_path, $namespace, $component)
     {
+        $ret = [];
+        $cmd = '#'.strtoupper($component);
+
+        $dir = $base_path . $component;
         $directory = new \RecursiveDirectoryIterator($dir, \FilesystemIterator::CURRENT_AS_PATHNAME | \FilesystemIterator::SKIP_DOTS);
         $iterator = new \RecursiveIteratorIterator($directory);
-        $ret = [];
         foreach ($iterator as $file) {
-            if (substr($file, -strlen('.php')) !== '.php') {
+            if (substr($file, -strlen($component.'.php')) !== $component.'.php') {
                 continue;
             }
-            $rel = ltrim(substr($file, strlen($base_dir), -strlen('.php')), '/\\');
-            $class = $namespace_prefix.'\\'.str_replace('/', '\\', $rel);
+
+            $short_class = str_replace('/', '\\', substr($file, strlen($dir) + 1, -strlen('.php')));
+            $class = $namespace . '\\' . $component .'\\'. $short_class;
+
+            // Business 已经格式化好了
             try {
                 // @phpstan-ignore-next-line argument.type
                 $reflect = new \ReflectionClass($class);
-            } catch (\ReflectionException $ex) {
-                continue;
-            }
-            if ($reflect->isAbstract() || $reflect->isInterface() || $reflect->isTrait() || $reflect->isEnum()) {
-                continue;
-            }
-            if (!$reflect->hasMethod('_')) {
-                continue;
+            } catch (\ReflectionException $ex) { //@codeCoverageIgnore
+                continue; //@codeCoverageIgnore
             }
             foreach ($reflect->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
                 if ($method->isStatic() || $method->isConstructor() || $method->isAbstract()) {
                     continue;
                 }
-                // 只收录声明在本类文件内的动态方法，排除从父类/trait 继承的方法
                 if ((string)$method->getFileName() !== (string)realpath($file)) {
-                    continue;
+                    continue; //@codeCoverageIgnore
                 }
-                $ret[] = "CALL {$class}@{$method->getName()}".$this->getCallParams($method);
+
+                $method_name = $method->getName();
+                $ret[] = "{$cmd} {$short_class}@{$method_name}".$this->getCallParams($method);
             }
         }
         return $ret;

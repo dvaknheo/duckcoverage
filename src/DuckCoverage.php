@@ -97,7 +97,7 @@ class DuckCoverage extends ComponentBase
 
         $this->moveDateJsonFile();
         SystemWrapper::header("x-duckcoverage-datafile: {$this->options['duckcoverage_data_file_json_file']}");
-        if($this->is_cli()){
+        if ($this->is_cli()) {
             echo "\033[41;30m";
             echo "DuckCoverage running: JSON_FILE: {$this->options['duckcoverage_data_file_json_file']}";
             echo "\033[0m\n";
@@ -161,7 +161,7 @@ class DuckCoverage extends ComponentBase
 
         //if (PHP_SAPI === 'cli') {
         SystemWrapper::register_shutdown_function(function () {
-            if ($this->route_hook_mode){
+            if ($this->route_hook_mode) {
                 return;                                                     // @codeCoverageIgnore
             }
             $this->call_http_handler('HTTP_X_DUCKCOVERAGE_AFTERRUN');   // @codeCoverageIgnore
@@ -180,15 +180,15 @@ class DuckCoverage extends ComponentBase
         $this->current_name = '';
         $this->current_group = '';
         Route::_()->addRouteHook([static::class, 'BeforeRun'], 'prepend-outter');
-        Route::_()->addRouteHook([static::class, 'AfterRun'], 'finally-outter');    
+        Route::_()->addRouteHook([static::class, 'AfterRun'], 'finally-outter');
     }
     public function _OnBeforeRun()
     {
-        if (!$this->route_hook_mode){
+        if (!$this->route_hook_mode) {
             return;
         }
         $this->current_group = $this->watchingGetName();
-        if(!$this->current_group){
+        if (!$this->current_group) {
             return;
         }
         $this->current_name = $this->make_name_of_http();
@@ -198,7 +198,7 @@ class DuckCoverage extends ComponentBase
 
     public function _OnAfterRun()
     {
-        if (!$this->route_hook_mode){
+        if (!$this->route_hook_mode) {
             return;
         }
         $this->call_http_handler('HTTP_X_DUCKCOVERAGE_AFTERRUN');
@@ -439,7 +439,7 @@ trait DuckCoverage_CommandTrait
     {
         @list($uri, $poststr, $method) = $argv;
         $uri = __url($uri);
-        $uri = substr($uri, strlen($this->url_base)-1);
+        $uri = substr($uri, strlen($this->url_base) - 1);
 
         $base_url = (string) ($this->options['duckcoverage_web_base_url'] ?? '');
         if ($base_url === '') {

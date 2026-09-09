@@ -5,7 +5,6 @@ use DuckCoverage\TestListerHelper;
 use DuckPhp\DuckPhp;
 
 use LibCoverage\LibCoverage;
-use TestListHelpInner\TLHostApp;
 
 class TestListerHelperTest extends \PHPUnit\Framework\TestCase
 {
@@ -21,6 +20,11 @@ class TestListerHelperTest extends \PHPUnit\Framework\TestCase
 #PHASE_BEGIN
 #INCLUDE_CALL tests\DuckCoverage\TLApp::ExtList
 #INCLUDE_CHILD tests\DuckCoverage\TLAppChild
+#BUSINESS NoBusiness@foo
+#MODEL NoModel@foo
+#ACTION NoAction@foo
+#COMPONENT System\\Foo@foo
+
 #PHASE_END
 
 EOT;
@@ -29,7 +33,7 @@ EOT;
             'namespace' =>'NoNamespace',
         ];
         \tests\DuckCoverage\TLApp::_()->init($options);
-        TestListerHelper::_()->explainMarco($list);
+        echo TestListerHelper::_()->explainMarco($list);
         TestListerHelper::_()->explainMarco('');
 
         //TestListerHelper::_()->replaceLineStart($list);
@@ -45,15 +49,15 @@ EOT;
     {
         $this->writeFile($path.'src/System/TLHostApp.php', <<<'EOT'
 <?php
-namespace TestListHelpInner;
+namespace TestListHelpInner\System;
 use DuckPhp\DuckPhp;
+use TestListHelpInner\Controller\TLCommand;
 
 class TLHostApp extends DuckPhp
 {
     public $options = [
         "path_namespace" => "src",
         "namespace" => "TestListHelpInner",
-        "namespace_controller" => "\\TestListHelpInner",
         "controller_welcome_class" => "TLController",
         "controller_class_postfix" => "",
         "controller_method_prefix" => "action_",
@@ -64,12 +68,13 @@ class TLHostApp extends DuckPhp
     ];
 }
 EOT);
-        $this->writeFile($path.'src/System/TLCommand.php', <<<'EOT'
+        $this->writeFile($path.'src/Controller/TLCommand.php', <<<'EOT'
 <?php
-namespace TestListHelpInner;
+namespace TestListHelpInner\Controller;
 
 class TLCommand
 {
+    public static function _(){ return new self(); }
     public function command_hello(){}
     public function command_routes(){}
     public function help(){}
@@ -77,9 +82,9 @@ class TLCommand
     public function __construct(){}
 }
 EOT);
-        $this->writeFile($path.'src/System/TLController.php', <<<'EOT'
+        $this->writeFile($path.'src/Controller/TLController.php', <<<'EOT'
 <?php
-namespace TestListHelpInner;
+namespace TestListHelpInner\Controller;
 
 class TLController
 {
@@ -180,8 +185,8 @@ EOT);
     {
         foreach ([
             'src/System/TLHostApp.php',
-            'src/System/TLCommand.php',
-            'src/System/TLController.php',
+            'src/Controller/TLCommand.php',
+            'src/Controller/TLController.php',
             'src/Business/TLBusiness.php',
             'src/Business/TLAbstract.php',
             'src/Business/TLInterface.php',
@@ -194,7 +199,7 @@ EOT);
             include $path.$f;
         }
 
-        TLHostApp::_()->init(['path' => $path, 'namespace' => 'TestListHelpInner']);
+        \TestListHelpInner\System\TLHostApp::_()->init(['path' => $path, 'namespace' => 'TestListHelpInner']);
         TestListerHelper::_()->genTestListOfAll();
 
         // 显式调用各项并断言基本形态，确保新方法被执行
@@ -205,14 +210,14 @@ EOT);
         $this->assertStringContainsString('RUN ', (string)$commands);
 
         $components = TestListerHelper::_()->genTestListOfComponents();
-        $this->assertStringContainsString('CALL ', (string)$components);
+        $this->assertStringContainsString('BUSINESS ', (string)$components);
 
         // genTestListOfComponents 扫描 src/Business 时会遇到 TLMissing.php，
         // 其对应类 TestListHelpInner\Business\TLMissing 不存在，
         // 以此覆盖 getComponentCalls 的 ReflectionException 捕获分支。
 
         try{
-            TLHostApp::_()->options['path_namespace']=null;
+            \TestListHelpInner\System\TLHostApp::_()->options['path_namespace']=null;
             TestListerHelper::_()->genTestListOfComponents();
         }catch(\LogicException $e){
             //ignore;
@@ -250,7 +255,6 @@ class TLAppChild extends DuckPhp
     }
     public static function GetTestList()
     {
-        echo "COMMENT from TLAppChild\n";
         return "COMMENT from TLAppChild\n";
     }
 }

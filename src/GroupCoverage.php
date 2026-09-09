@@ -1,8 +1,9 @@
 <?php declare(strict_types=1);
 /**
- * LibCoverage
- * From this time on, you never be alone~
+ * DuckPhp
+ * From this time, you never be alone~
  */
+
 namespace DuckCoverage;
 
 use SebastianBergmann\CodeCoverage\CodeCoverage;
@@ -58,7 +59,7 @@ class GroupCoverage
     }
 
     /**
-     * 
+     *
      * @param array<string,mixed> $options
      * @param ?object $context
      * @return static
@@ -204,21 +205,21 @@ class GroupCoverage
         $analyser = new \SebastianBergmann\CodeCoverage\StaticAnalysis\ParsingFileAnalyser(true, true);
         $lineCoverage = $coverage->getData()->lineCoverage();
         $filter = $coverage->filter();
-        
+
         foreach ($filter->files() as $file) {
             $executableLines = array_keys($analyser->executableLinesIn($file));
             $ignoredLines = $analyser->ignoredLinesFor($file);
-            
+
             // 如果没有可执行行，跳过
             if (empty($executableLines)) {
                 continue;
             }
-            
+
             // 确保 lineCoverage 中有该文件的条目
             if (!isset($lineCoverage[$file])) {
                 $lineCoverage[$file] = [];
             }
-            
+
             // 只为非忽略的行填充空数组
             foreach ($executableLines as $line) {
                 if (in_array($line, $ignoredLines, true)) {
@@ -229,7 +230,7 @@ class GroupCoverage
                 }
             }
         }
-        
+
         $coverage->getData()->setLineCoverage($lineCoverage);
     }
     /**
