@@ -93,6 +93,10 @@ class DuckCoverage extends ComponentBase
         if ($cmd === $this->default_cmd) {
             $this->in_subcmd = true;
         }
+        $path_runtime = App::_()->getRuntimePath();
+
+        $this->options['duckcoverage_path'] = $path_runtime . $this->default_path;
+
         $this->current_group = $this->watchingGetName();
 
         $this->moveDateJsonFile();
@@ -109,6 +113,11 @@ class DuckCoverage extends ComponentBase
 
     protected function moveDateJsonFile()
     {
+        if ($this->current_group) {
+            $path_runtime = App::_()->options['path_runtime']??'runtime';
+            $path =  $this->default_path; //$this->options['duckcoverage_path'];
+            $this->options['duckcoverage_data_file_json_file'] = $path . $this->current_group.'.DuckPhpData.config.json';
+        }
         App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
         App::_()->options['data_file_enable'] = true;
     }
@@ -399,6 +408,9 @@ EOT;
     protected function doEnd()
     {
         $this->getRunner()->doEnd();  // @codeCoverageIgnore
+        if ($this->current_group) {
+            file_put_contents($this->options['duckcoverage_path'].$this->current_group.'.list.log',$this->current_name."\n",FILE_APPEND);
+        }
     }
     protected function createReport($groups, $path_src, $path_dump, $path_report)
     {
