@@ -119,11 +119,15 @@ class GroupCoverage
         @mkdir($path_dump);
         $path_dump .= $this->current_group;
         @mkdir($path_dump);
-        $file = (string)  $path_dump. DIRECTORY_SEPARATOR . \md5($this->current_name) . '.php';
+        $file = (string)  $path_dump. DIRECTORY_SEPARATOR . $this->make_filename($this->current_name);
         (new ReportOfPHP)->process($this->coverage, $file);
         $ext = "\n// ".$this->current_name ."\n";
         file_put_contents($file, $ext, FILE_APPEND);
         $this->is_end = true;
+    }
+    protected function make_filename($name)
+    {
+        return (new \DateTime())->format('Y-m-d_H_i_s_v').'-'.\sha1($name).'.php';
     }
     ////////////////////////////////////////////////////////////////////////////
     /**

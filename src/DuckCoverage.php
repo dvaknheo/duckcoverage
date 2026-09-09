@@ -193,7 +193,7 @@ class DuckCoverage extends ComponentBase
         }
         $this->current_name = $this->make_name_of_http();
         $this->doBegin();
-        $this->call_http_handler('HTTP_X_MYCOVERAGE_BEFORERUN');// @codeCoverageIgnore
+        $this->call_http_handler('HTTP_X_DUCKCOVERAGE_BEFORERUN');// @codeCoverageIgnore
     }
 
     public function _OnAfterRun()
@@ -201,7 +201,7 @@ class DuckCoverage extends ComponentBase
         if (!$this->route_hook_mode){
             return;
         }
-        $this->call_http_handler('HTTP_X_MYCOVERAGE_AFTERRUN');
+        $this->call_http_handler('HTTP_X_DUCKCOVERAGE_AFTERRUN');
         $this->doEnd();
     }
     protected function is_cli()

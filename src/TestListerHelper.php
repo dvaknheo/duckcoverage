@@ -49,6 +49,14 @@ class TestListerHelper
                 $ret[] = $this->doIncludeCall($line);
             } elseif (substr($line, 0, strlen('#INCLUDE_CHILD ')) === '#INCLUDE_CHILD ') {
                 $ret[] = $this->doIncludeChild($line);
+            } elseif (substr($line, 0, strlen('#COMPONENT ')) === '#COMPONENT ') {
+                $ret[] = $this->doIncludeComponent($line, '#COMPONENT ', '');
+            } elseif (substr($line, 0, strlen('#BUSINESS ')) === '#BUSINESS ') {
+                $ret[] = $this->doIncludeComponent($line, '#BUSINESS ', 'Business\\');
+            } elseif (substr($line, 0, strlen('#MODEL ')) === '#MODEL ') {
+                $ret[] = $this->doIncludeComponent($line, '#MODEL ', 'Model\\');
+            } elseif (substr($line, 0, strlen('#ACTION ')) === '#ACTION ') {
+                $ret[] = $this->doIncludeComponent($line, '#ACTION ', 'Controller\\');
             } else {
                 $ret[] = $line;
             }
@@ -75,32 +83,11 @@ class TestListerHelper
         [$_default, $child_app] = explode(" ", $line);
         return "COMMENT APP $child_app\n".$this->getChildList($child_app);
     }
-    // public function replaceLineStart(string $content, array $rules): string
-    // {
-    //     foreach ($rules as $prefix => $append) {
-    //         if (strncmp($content, $prefix, strlen($prefix)) === 0) {
-    //             return substr_replace($content, $append, strlen($prefix), 0);
-    //         }
-    //     }
-    //     return $content;
-    // }
-    // public function replaceMarco($str,$args)
-    // {
-    //     if (empty($args)) {
-    //         return $str;
-    //     }
-    //     if (false === strpos($str,'{')) {
-    //         return $str;
-    //     }
-    //     $a = [];
-    //     foreach ($args as $k => $v) {
-    //         $a["{".$k."}"] = $v;
-    //     }
-
-    //     $ret = str_replace(array_keys($a), array_values($a), $str);
-
-    //     return $ret;
-    // }
+    protected function doIncludeComponent(string $line,string $old_cmd,string $new_prefix ='')
+    {
+        $prefix = 'CALL '. App::Phase().'!'.App::_()->options['namespace']."\\".$new_prefix;
+        return substr_replace($line, $prefix, 0, strlen($old_cmd));;
+    }
 
 
 
@@ -243,6 +230,32 @@ class TestListerHelper
         $list .= "\n";
         return $list;
     }
+    // public function replaceLineStart(string $content, array $rules): string
+    // {
+    //     foreach ($rules as $prefix => $append) {
+    //         if (strncmp($content, $prefix, strlen($prefix)) === 0) {
+    //             return substr_replace($content, $append, strlen($prefix), 0);
+    //         }
+    //     }
+    //     return $content;
+    // }
+    // public function replaceMarco($str,$args)
+    // {
+    //     if (empty($args)) {
+    //         return $str;
+    //     }
+    //     if (false === strpos($str,'{')) {
+    //         return $str;
+    //     }
+    //     $a = [];
+    //     foreach ($args as $k => $v) {
+    //         $a["{".$k."}"] = $v;
+    //     }
+
+    //     $ret = str_replace(array_keys($a), array_values($a), $str);
+
+    //     return $ret;
+    // }
     // protected function get_component_path($component,$base_file = 'Base')
     // {
     //         // \\DuckAdmin\\   xxxx\\DuckAdmin\\system\\AA.php $file DuckAdmin
