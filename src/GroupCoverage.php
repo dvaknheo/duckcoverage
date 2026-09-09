@@ -3,7 +3,7 @@
  * LibCoverage
  * From this time on, you never be alone~
  */
-namespace LibCoverage;
+namespace DuckCoverage;
 
 use SebastianBergmann\CodeCoverage\CodeCoverage;
 use SebastianBergmann\CodeCoverage\Driver\Selector as CodeCoverageSelector;
@@ -82,7 +82,9 @@ class GroupCoverage
     {
         $this->is_end = false;
         $this->pre_begin($name, $group, $path_src, $path_dump);    // @codeCoverageIgnore
-        LibCoverage::_()->doPause();
+        if (class_exists(\LibCoverage\LibCoverage::class)) {
+            \LibCoverage\LibCoverage::_()->doPause();   // @codeCoverageIgnore
+        }
         $this->coverage->start($name);      // @codeCoverageIgnore
     }
     protected function pre_begin(string $name, string $group, string $path_src, string $path_dump): void
@@ -106,7 +108,9 @@ class GroupCoverage
             return;
         }
         $this->coverage->stop();        // @codeCoverageIgnore
-        LibCoverage::_()->doResume();   // @codeCoverageIgnore
+        if (class_exists(\LibCoverage\LibCoverage::class)) { // @codeCoverageIgnore
+            \LibCoverage\LibCoverage::_()->doResume();   // @codeCoverageIgnore
+        }
         $this->post_end();
     }
     protected function post_end()

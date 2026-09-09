@@ -1,7 +1,7 @@
 <?php
-namespace tests\LibCoverage;
+namespace tests\DuckCoverage;
 
-use LibCoverage\GroupCoverage;
+use DuckCoverage\GroupCoverage;
 use LibCoverage\LibCoverage;
 
 class GroupCoverageTest extends \PHPUnit\Framework\TestCase
