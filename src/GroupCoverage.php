@@ -192,21 +192,55 @@ class GroupCoverage
      * 补全部分覆盖文件：把 filter 内已有覆盖数据的文件的可执行行补进 lineCoverage（未执行的为空数组）。
      * php-code-coverage 9.x 只对"完全未覆盖"文件补未执行行（addUncoveredFilesFromFilter），
      * 部分覆盖文件若缺失未执行行，报告会把该文件错误统计为 100%。
+     * 修复：排除完全被 @codeCoverageIgnore 标记的文件；对于部分被标记的文件，跳过被忽略的行
+     *       同时从 lineCoverage 中移除这些被忽略的行，使 HTML 报告不显示它们
      */
     protected function fillPartialCoveredFiles(CodeCoverage $coverage): void
     {
-        $analyser = new \SebastianBergmann\CodeCoverage\StaticAnalysis\ParsingFileAnalyser(true, false);
+        $analyser = new \SebastianBergmann\CodeCoverage\StaticAnalysis\ParsingFileAnalyser(true, true);
         $lineCoverage = $coverage->getData()->lineCoverage();
-        foreach ($coverage->filter()->files() as $file) {
-            if (!isset($lineCoverage[$file])) {
-                continue;    // @codeCoverageIgnore
+        $filter = $coverage->filter();
+        $filesToRemove = [];
+        
+        foreach ($filter->files() as $file) {
+            $executableLines = array_keys($analyser->executableLinesIn($file));
+            $ignoredLines = $analyser->ignoredLinesFor($file);
+            
+            // 如果没有可执行行，跳过
+            if (empty($executableLines)) {
+                continue;
             }
-            foreach (array_keys($analyser->executableLinesIn($file)) as $line) {
-                if (!isset($lineCoverage[$file][$line])) {
-                    $lineCoverage[$file][$line] = [];  // @codeCoverageIgnore
+            
+            // 如果所有可执行行都被忽略，排除此文件
+            $nonIgnoredExecutableLines = array_diff($executableLines, $ignoredLines);
+            $debug[] = "$file: executable=" . count($executableLines) . ", ignored=" . count($ignoredLines) . ", nonIgnored=" . count($nonIgnoredExecutableLines);
+            if (empty($nonIgnoredExecutableLines)) {
+                $filesToRemove[] = $file;
+                continue;
+            }
+            
+            // 确保 lineCoverage 中有该文件的条目
+            if (!isset($lineCoverage[$file])) {
+                $lineCoverage[$file] = [];
+            }
+            
+            // 填充非忽略行的空数组，并移除忽略行的数据
+            foreach ($executableLines as $line) {
+                if (in_array($line, $ignoredLines, true)) {
+                    // 移除被忽略的行，这样 HTML 报告就不会显示它们
+                    unset($lineCoverage[$file][$line]);
+                } elseif (!isset($lineCoverage[$file][$line])) {
+                    $lineCoverage[$file][$line] = [];
                 }
             }
         }
+        
+        // 排除只包含忽略行的文件
+        foreach ($filesToRemove as $file) {
+            $filter->excludeFile($file);
+            unset($lineCoverage[$file]);
+        }
+        
         $coverage->getData()->setLineCoverage($lineCoverage);
     }
     /**

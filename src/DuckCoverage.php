@@ -390,7 +390,7 @@ EOT;
     ////[[[[
     protected function getRunner()
     {
-        return GroupCoverage::_();
+        return \DuckCoverage\GroupCoverage::_();
     }
     protected function doBegin()
     {
