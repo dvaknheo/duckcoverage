@@ -139,10 +139,10 @@ php cli.php cover --go group1
 watch → play → report → stop
 ```
 
-- 效果：以 `group1` 为组名执行回放并生成报告。
+- 效果：以 `group1` 为组名执行回放并生成报告；报告生成在 `<runtime>/DuckCoverage/group1.report/`。
 - CI 场景用这一条命令最合适。
 
-> **关于报告位置。** `--go` 在出报告这一步会强制打开 `duckcoverage_report_direct`，因此报告写到 `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/`——默认是 `<runtime>/DuckCoverage/AAAAA.report/`，**不是** `<组名>.report/`。这是当前的实际行为，仓库的待办便签（`修复go模式下的报告地址错误.txt`）记录了这个问题；如果你需要 `<组名>.report/` 的目录结构，请单独用一步 `--report <组名>`。
+`--go` 是下面四个步骤的**真正组合**：它不改动任何选项，因此生成的报告目录与手工依次执行 `--watch`、`--play`、`--report`、`--stop` 完全一致。只有在你设置了 `duckcoverage_report_direct => true`（或用 `--report` 一次报告多个组）时，报告才会改写到 `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/`——见「输出路径」。
 
 ### 分步执行
 
@@ -212,7 +212,7 @@ php cli.php cover
 | `--stop` | 停止监听，移除监听标记与锁文件 |
 | `--play` | 回放回调类 `GetTestList()` 返回的测试列表 |
 | `--report [a b c]` | 为给定组渲染 HTML 报告（默认当前监听组），打印输出路径与耗时 |
-| `--go <组名>` | 组合命令：`watch + play + report + stop` 一步到位（CI 友好） |
+| `--go <组名>` | 组合命令：`watch + play + report + stop` 一步到位（CI 友好）。不写组名时，与 `--watch` 一样生成带时间戳的组名 |
 
 如果 `duckcoverage_enable` 是关的，`cover` 不会执行，而是打印提示（`turn on setting to work: 'duckcoverage_enable'`）。
 
@@ -226,8 +226,8 @@ php cli.php cover
 | `<runtime>/DuckCoverage/<组名>.watch.lock` | `--watch` —— 监听开始时间 |
 | `<runtime>/DuckCoverage/<组名>.list.log` | 每个被采集的请求 —— 每行一个请求名 |
 | `<runtime>/DuckCoverage/<组名>/<日期>-<sha1(名字)>.php` | 每个被采集的请求 —— 覆盖率 dump（由 `phpunit/php-code-coverage` 序列化） |
-| `<runtime>/DuckCoverage/<组名>.report/` | `--report <组名>` 且 `duckcoverage_report_direct => false` |
-| `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/` | `--report a b c`（多组）、任何 `duckcoverage_report_direct => true` 的报告，以及 `--go` |
+| `<runtime>/DuckCoverage/<组名>.report/` | 单组报告：`--report <组名>` 与 `--go <组名>`，且 `duckcoverage_report_direct => false` |
+| `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/` | `--report a b c`（多组），或任何 `duckcoverage_report_direct => true` 的报告 |
 | `<runtime>/DuckCoverage/<组名>.DuckPhpData.config.json` | 监听某个组期间使用的按组 DuckPHP 数据文件 |
 
 服务端还会在响应里带上两个诊断头：`x-duckcoverage-group`（这次请求被采集到的组）与 `x-duckcoverage-datafile`（正在使用的数据文件）。
@@ -313,7 +313,7 @@ public $options = [
 | `duckcoverage_path` | `<runtime>/DuckCoverage/` | 基础路径（监听标记 / dump / 报告）。init 时始终由运行时路径推导 |
 | `duckcoverage_path_src` | `'src/'` | 覆盖率对应的源码目录。相对值按**工程路径**解析，因此默认是 `<工程根>/src/`；建议显式传绝对路径。**请配置为你自己的源码目录** |
 | `duckcoverage_report_direct` | `false` | 为 false 且只报告一个组时写入 `<组名>.report/`；为 true（或报告多个组）时改写入 `duckcoverage_report_default_dir` |
-| `duckcoverage_report_default_dir` | `'AAAAA.report'` | 多组报告、`duckcoverage_report_direct => true` 以及 `--go` 使用的报告目录 |
+| `duckcoverage_report_default_dir` | `'AAAAA.report'` | 多组报告与 `duckcoverage_report_direct => true` 使用的报告目录 |
 | `duckcoverage_web_base_url` | `''` | 外部服务器(如 nginx)基础 URL；空则退回内置测试服务器 |
 | `duckcoverage_server_port` | `8017` | 内置测试服务器端口 |
 | `duckcoverage_server_host` | `''` | 内置测试服务器主机 |
@@ -416,7 +416,7 @@ vendor/bin/php-cs-fixer fix
 确认 `duckcoverage_path_server`（默认工程根目录）与 `duckcoverage_path_document`（默认 `public`）指向正确，且 `duckcoverage_homepage` 与你的开发入口一致。
 
 **Q：`--go` 生成的报告在 `AAAAA.report` 而不是 `<组名>.report`？**
-这是 `--go` 当前的行为：它在出报告这一步强制打开了 `duckcoverage_report_direct`。可以用 `duckcoverage_report_default_dir` 指定目录；想要 `<组名>.report/` 的结构，就单独跑一步 `--report <组名>`。
+这说明 `duckcoverage_report_direct` 是 `true`：该选项对 `--go` 的作用与对 `--report <组名>` 完全一样。把它设为 `false`（默认值）即可得到 `<组名>.report/` 结构；也可以用 `duckcoverage_report_default_dir` 给那个扁平目录改名。
 
 **Q：怎么把多轮测试合并？**
 用同一组名 watch，多轮请求都累积到该组的 dump；`--report mygroup` 一次出报告。也可以 `--report a b c` 一次合并多个组。

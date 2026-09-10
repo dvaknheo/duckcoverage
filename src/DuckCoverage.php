@@ -345,7 +345,8 @@ EOT;
             if ($watch_name === true) {
                 $watch_name = 'default_' . DATE('Y_m_d_H_i_s');
             }
-            $this->options['duckcoverage_report_direct'] = true;
+            // 不覆盖 duckcoverage_report_direct：--go 必须等价于 watch + play + report + stop，
+            // 报告目录由该选项与组数决定（单组 -> <group>.report，多组/直写 -> report_default_dir）。
             $this->watchingBegin($watch_name);
             echo "watching {$watch_name}\n";
             $this->play();

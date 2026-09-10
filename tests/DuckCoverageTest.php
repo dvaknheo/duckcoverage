@@ -48,6 +48,16 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $this->cmd("cover --report group1");
         $this->cmd("cover --go");
 
+        // --go 不得覆盖 duckcoverage_report_direct：默认时应输出 <group>.report，
+        // 与 watch + play + report + stop 手工四步得到同一个目录。
+        DuckCoverage::_()->options['duckcoverage_report_direct'] = false;
+        ob_start();
+        $this->cmd("cover --go go_path_group");
+        $go_output = (string)ob_get_clean();
+        $this->assertStringContainsString('go_path_group.report', $go_output);
+        $this->assertStringNotContainsString('AAAAA.report', $go_output);
+        DuckCoverage::_()->options['duckcoverage_report_direct'] = true;
+
         DuckCoverageApp::_()->testMore();
 
         /////////////
@@ -361,6 +371,9 @@ class DuckCoverageApp extends DuckPhp
         DuckCoverage::_()->beforeInit();
         $this->options['duckcoverage_enable']=true;
 
+        // 下面用内置函数 is_string() 覆盖 callHandler 的「函数调用」分支：
+        // 它的第一个参数在 PHP 7.4 叫 $var、PHP 8.0 起叫 $value，
+        // 而参数是按名字注入的，所以两个名字都传，7.4 与 8.x 上都能命中。
         $str=<<<EOT
 COMMENT just a test
 BAD 
@@ -380,8 +393,8 @@ RUN mycmd {ARG}
 RUN :mycmd
 
 CALL @bad
-CALL !is_string value=ok
-CALL is_string value=ok
+CALL !is_string var=ok value=ok
+CALL is_string var=ok value=ok
 CALL {static}->func name=n1
 CALL {static}@func name=n2
 CALL {static}@func

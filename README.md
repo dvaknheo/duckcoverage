@@ -136,9 +136,10 @@ watch → play → report → stop
 ```
 
 - Result: plays the callback list for `group1` and generates a report.
+- Report location: `<runtime>/DuckCoverage/group1.report/`.
 - This command is especially suitable for CI.
 
-> **Note on the report location.** `--go` forces `duckcoverage_report_direct` on for its report step, so the report is written to `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/` — by default `<runtime>/DuckCoverage/AAAAA.report/`, **not** `<group>.report/`. This is the current behaviour and is tracked in the repository's TODO notes (`修复go模式下的报告地址错误.txt`); use a separate `--report <group>` step if you need the `<group>.report/` layout.
+`--go` is a true composition of the four steps below: it does not change any option, so it always produces the same report directory as running `--watch`, `--play`, `--report` and `--stop` by hand. With `duckcoverage_report_direct => true` (or when reporting several groups with `--report`) the report goes to `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/` instead — see “Output Paths”.
 
 ### Step-by-step operation
 
@@ -208,7 +209,7 @@ php cli.php cover
 | `--stop` | Stop watching and remove the watching marker and its lock file. |
 | `--play` | Play the test list returned by the callback's `GetTestList()`. |
 | `--report [a b c]` | Render an HTML report for the specified groups (the current watched group by default) and print the output path and elapsed time. |
-| `--go <group>` | Combined command: `watch + play + report + stop` in one step (CI-friendly). |
+| `--go <group>` | Combined command: `watch + play + report + stop` in one step (CI-friendly). If no group is supplied, the same timestamped name as `--watch` is used. |
 
 If `duckcoverage_enable` is off, `cover` prints a hint instead of running (`turn on setting to work: 'duckcoverage_enable'`).
 
@@ -222,8 +223,8 @@ All paths below are relative to `<runtime>` (DuckPHP's `path_runtime`, `runtime/
 | `<runtime>/DuckCoverage/<group>.watch.lock` | `--watch` — timestamp of the watch start |
 | `<runtime>/DuckCoverage/<group>.list.log` | every collected request — one recorded request name per line |
 | `<runtime>/DuckCoverage/<group>/<date>-<sha1(name)>.php` | every collected request — the coverage dump (serialized by `phpunit/php-code-coverage`) |
-| `<runtime>/DuckCoverage/<group>.report/` | `--report <group>` with `duckcoverage_report_direct => false` |
-| `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/` | `--report a b c` (multiple groups), any report with `duckcoverage_report_direct => true`, and `--go` |
+| `<runtime>/DuckCoverage/<group>.report/` | a single-group report: `--report <group>`, and `--go <group>`, with `duckcoverage_report_direct => false` |
+| `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/` | `--report a b c` (multiple groups), or any report with `duckcoverage_report_direct => true` |
 | `<runtime>/DuckCoverage/<group>.DuckPhpData.config.json` | the per-group DuckPHP data file used while a group is watched |
 
 The server also answers every request with two diagnostic headers: `x-duckcoverage-group` (the group the request was collected into) and `x-duckcoverage-datafile` (the data file in use).
@@ -309,7 +310,7 @@ public $options = [
 | `duckcoverage_path` | `<runtime>/DuckCoverage/` | Base path for watch markers, dumps and reports. Always derived from the runtime path at init time. |
 | `duckcoverage_path_src` | `'src/'` | Source directory used for coverage. A relative value is resolved against the **project path**, so the default is `<project>/src/`; pass an absolute path to be explicit. **Configure it for your own sources.** |
 | `duckcoverage_report_direct` | `false` | When false and exactly one group is reported, write to `<group>.report/`; when true (or with several groups), write to `duckcoverage_report_default_dir` instead. |
-| `duckcoverage_report_default_dir` | `'AAAAA.report'` | Report directory used for multi-group reports, for `duckcoverage_report_direct => true`, and for `--go`. |
+| `duckcoverage_report_default_dir` | `'AAAAA.report'` | Report directory used for multi-group reports and for `duckcoverage_report_direct => true`. |
 | `duckcoverage_web_base_url` | `''` | Base URL for an external server such as nginx; when empty, use the built-in test server. |
 | `duckcoverage_server_port` | `8017` | Port for the built-in test server. |
 | `duckcoverage_server_host` | `''` | Host for the built-in test server. |
@@ -419,7 +420,7 @@ Make sure `duckcoverage_path_server` (the project root by default) and `duckcove
 
 **Q: `--go` produced a report in `AAAAA.report` instead of `<group>.report`.**
 
-That is the current behaviour of `--go`, which forces `duckcoverage_report_direct` for its report step. Set `duckcoverage_report_default_dir` to choose the directory, or run `--report <group>` as a separate step to get the `<group>.report/` layout.
+That happens when `duckcoverage_report_direct` is `true`: the option applies to `--go` exactly as it does to `--report <group>`. Set `duckcoverage_report_direct => false` (the default) to get the `<group>.report/` layout, or change `duckcoverage_report_default_dir` to rename the flattened directory.
 
 **Q: How do I combine multiple rounds of tests?**
 
