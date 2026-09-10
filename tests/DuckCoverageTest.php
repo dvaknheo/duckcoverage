@@ -25,10 +25,15 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         DuckCoverage::_(DuckCoverageEx::_());
 
         include $path.'src/MyDuckCoverageApp.php';
+        // 测试专用配置：端口等放在 tests/data_for_tests/setting.php，缺文件时用默认值
+        $test_config = is_file(__DIR__ . '/data_for_tests/setting.php')
+            ? (array)include __DIR__ . '/data_for_tests/setting.php'
+            : [];
         $options = [
             'path'=>$path,
             'duckcoverage_test_lister' =>[DuckCoverageTestList::class,'GetTestList'],
             'duckcoverage_path_server' =>$path,
+            'duckcoverage_server_port' => $test_config['port'] ?? 8017,
         ];
         //DuckCoverageApp::_(\MyDuckCoverageApp::_())->init($options);
         var_dump($_SERVER['argv']);
@@ -59,6 +64,17 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         DuckCoverage::_()->options['duckcoverage_report_direct'] = true;
 
         DuckCoverageApp::_()->testMore();
+
+        // 上游 HttpServer 在 Windows 上现在能拿到真实 PID（修复前恒为 0）
+        $this->assertGreaterThan(0, DuckCoverageEx::_()->testRunServer());
+
+        // explainWeb() 拼请求地址时跟随 duckcoverage_server_host：
+        // 空值/通配绑定地址回落到 127.0.0.1，IPv6 字面量补方括号。
+        $this->assertSame('127.0.0.1', DuckCoverageEx::_()->testServerHostForRequest(''));
+        $this->assertSame('127.0.0.1', DuckCoverageEx::_()->testServerHostForRequest('0.0.0.0'));
+        $this->assertSame('127.0.0.1', DuckCoverageEx::_()->testServerHostForRequest('::'));
+        $this->assertSame('localhost', DuckCoverageEx::_()->testServerHostForRequest('localhost'));
+        $this->assertSame('[::1]', DuckCoverageEx::_()->testServerHostForRequest('::1'));
 
         /////////////
         $_SERVER['argv'] = $__SERVER['argv'];
@@ -168,7 +184,6 @@ class MyDuckCoverageApp extends tests\DuckCoverage\DuckCoverageApp
         'is_debug' => true,
         'name'=> 'MyDuckCoverageApp',
         'cli_command_with_common' => true,
-        'duckcoverage_enable'=>true,
 
     ];
     protected function onPrepare(): void
@@ -234,11 +249,21 @@ class DuckCoverageEx extends DuckCoverage
     public function testRunServer()
     {
         $this->startServer();
+        $pid = \DuckPhp\HttpServer\HttpServer::_()->getPid();
         $this->stopServer();
+        return $pid;
+    }
+    public function testServerHostForRequest(string $host)
+    {
+        $old = $this->options['duckcoverage_server_host'];
+        $this->options['duckcoverage_server_host'] = $host;
+        $ret = $this->getServerHostForRequest();
+        $this->options['duckcoverage_server_host'] = $old;
+        return $ret;
     }
     public  function cloze_curl()
     {
-        $this->curl_file_get_contents(['http://ai.local.com/?sleep=1',"127.0.0.1:8017"]);
+        $this->curl_file_get_contents(['http://ai.local.com/?sleep=1', "127.0.0.1:{$this->options['duckcoverage_server_port']}"]);
     }
     public $_is_cli = true;
     protected function is_cli()
@@ -322,7 +347,6 @@ class DuckCoverageApp extends DuckPhp
 
     public $options =[
         'is_debug' => true,
-        'duckcoverage_enable'=>true,
         'duckcoverage_debug_curl_echo_back' => true,
         'path_namespace' => 'app',
     ];
@@ -365,11 +389,11 @@ class DuckCoverageApp extends DuckPhp
         DuckCoverage::_()->beforeInit();
         $this->is_root = true;
 
-        $this->options['duckcoverage_enable']=false;
-        DuckCoverage::_()->options['duckcoverage_enable']=true;
+        // 覆盖 init() 的提前返回分支：duckcoverage_stop_init = true 时不做任何配置
+        $this->options['duckcoverage_stop_init']=true;
         DuckCoverage::_()->init($this->options,null);
         DuckCoverage::_()->beforeInit();
-        $this->options['duckcoverage_enable']=true;
+        $this->options['duckcoverage_stop_init']=false;
 
         // 下面用内置函数 is_string() 覆盖 callHandler 的「函数调用」分支：
         // 它的第一个参数在 PHP 7.4 叫 $var、PHP 8.0 起叫 $value，

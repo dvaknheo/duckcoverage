@@ -24,7 +24,9 @@ class DuckCoverage extends ComponentBase
     use DuckCoverage_HttpClientTrait;
 
     public $options = [
-        'duckcoverage_enable' => true,
+        // 停止 init 阶段(留给未来使用)：置 true 时 init() 直接返回，不做任何配置。
+        // 注意与开关 duckcoverage_enable 无关——那个开关走 App::Setting()，见 beforeInit()。
+        'duckcoverage_stop_init' => false,
         'duckcoverage_data_file_json_file' => 'DuckPhpData-duckcoverage.config.json',
         'duckcoverage_reg_console_command' => true,
         'duckcoverage_test_lister' => null,
@@ -114,8 +116,8 @@ class DuckCoverage extends ComponentBase
     protected function moveDateJsonFile()
     {
         if ($this->current_group) {
-            $path_runtime = App::_()->options['path_runtime']??'runtime';
-            $path =  $this->default_path; //$this->options['duckcoverage_path'];
+            $path_runtime = App::_()->options['path_runtime'] ?? 'runtime';
+            $path = $this->default_path; //$this->options['duckcoverage_path'];
             $this->options['duckcoverage_data_file_json_file'] = $path . $this->current_group.'.DuckPhpData.config.json';
         }
         App::_()->options['data_file_json_file'] = $this->options['duckcoverage_data_file_json_file'];
@@ -128,7 +130,7 @@ class DuckCoverage extends ComponentBase
         if (!App::_()->isRoot()) {
             return $this;
         }
-        if (!$this->options['duckcoverage_enable']) {
+        if ($this->options['duckcoverage_stop_init']) {
             return $this;
         }
         $path_project = App::_()->getProjectPath();
@@ -410,7 +412,7 @@ EOT;
     {
         $this->getRunner()->doEnd();  // @codeCoverageIgnore
         if ($this->current_group) {
-            file_put_contents($this->options['duckcoverage_path'].$this->current_group.'.list.log',$this->current_name."\n",FILE_APPEND);
+            file_put_contents($this->options['duckcoverage_path'].$this->current_group.'.list.log', $this->current_name."\n", FILE_APPEND);
         }
     }
     protected function createReport($groups, $path_src, $path_dump, $path_report)
@@ -458,7 +460,8 @@ trait DuckCoverage_CommandTrait
         if ($base_url === '') {
             $this->startServer();
             //$this->getServerBaseUrl();
-            $base_url = "http://127.0.0.1:{$this->options['duckcoverage_server_port']}" . $this->options['duckcoverage_homepage'];
+            $base_url = 'http://' . $this->getServerHostForRequest()
+                . ":{$this->options['duckcoverage_server_port']}" . $this->options['duckcoverage_homepage'];
         }
         $post = [];
         if ($poststr) {
@@ -670,11 +673,11 @@ trait DuckCoverage_HttpServerTrait
             return;
         }
         $server_options = [
+            'host' => $this->options['duckcoverage_server_host'] ?: '127.0.0.1',
             'path' => $this->options['duckcoverage_path_server'],
             'path_document' => $this->options['duckcoverage_path_document'],
             'port' => $this->options['duckcoverage_server_port'],
             'background' => true,
-            'http_app_class' => get_class(App::Root()),
             'workers' => 2,
         ];
 
@@ -694,6 +697,24 @@ trait DuckCoverage_HttpServerTrait
         }
         HttpServer::_()->close();
         $this->is_server_started = false;
+    }
+    /**
+     * 回放 WEB 指令时使用的主机名(内置服务器)。
+     *
+     * duckcoverage_server_host 描述的是**绑定地址**：0.0.0.0 / :: 这类通配地址不能作为请求
+     * 目标(在 Windows 上会直接连不上)，所以这里回落到 127.0.0.1；IPv6 字面量需要加方括号才能
+     * 拼进 URL。绑定地址本身仍按该选项原样传给 HttpServer，见 startServer()。
+     */
+    protected function getServerHostForRequest(): string
+    {
+        $host = trim((string) ($this->options['duckcoverage_server_host'] ?? ''));
+        if ($host === '' || $host === '0.0.0.0' || $host === '::' || $host === '[::]') {
+            return '127.0.0.1';
+        }
+        if (strpos($host, ':') !== false && strpos($host, '[') !== 0) {
+            return '[' . $host . ']';
+        }
+        return $host;
     }
 }
 trait DuckCoverage_HttpClientTrait

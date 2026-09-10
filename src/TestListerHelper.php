@@ -130,7 +130,7 @@ class TestListerHelper
         $reflect = new \ReflectionClass($class);
         $filename = $reflect->getFileName();
 
-        if (!is_string($filename) || $filename === '') {
+        if (!is_string($filename)) {
             throw new \LogicException("Can not locate file for App->getThisClassName() '{$class}'"); //@codeCoverageIgnore
         }
 

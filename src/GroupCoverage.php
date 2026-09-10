@@ -17,6 +17,9 @@ use SebastianBergmann\CodeCoverage\Report\PHP as ReportOfPHP;
  * 组件风格:_() 单例 + init() 初始化。
  * 按组(group)驱动覆盖率工作流:begin() 采集 -> end() 停止并 dump 到组目录 -> createReport()/showAllReport() 按组合并出报告。
  * 对外只暴露合并后的方法,避免调用方零散接触底层 API。
+ *
+ * @phpstan-consistent-constructor  _() 里会用 new static() 实例化子类，
+ * 因此要求子类与本类一样可以无参构造(否则请用 __SINGLETONEX_REPALACER 替换实例)。
  */
 class GroupCoverage
 {

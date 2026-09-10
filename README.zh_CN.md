@@ -63,10 +63,6 @@ class DemoApp extends DuckPhp
 {
     public $options = [
         // ... 你原有的选项 ...
-        'setting' => [
-            'duckcoverage_enable' => true,
-        ],
-
         'duckcoverage_test_lister' => [TestLister::class, 'GetTestList'],
         //'duckcoverage_report_direct' => false,
         //'duckcoverage_web_base_url' => 'http://www.example.com/',
@@ -82,9 +78,17 @@ class DemoApp extends DuckPhp
 }
 ```
 
+并把这个设置项加进应用设置文件：
+
+```php
+<?php
+// config/DuckPhpSettings.config.php
+return [
+    'duckcoverage_enable' => true,
+];
+```
+
 > 和其他常见 DuckPHP 插件不同，DuckCoverage 必须按示例在**根应用**的 `onPrepare` 里做初始化。DuckCoverage 选项也需要放进根应用的应用选项里。
->
-> 注意开关放在哪里：`Prepare()` 用 `App::Setting('duckcoverage_enable')` 读取它，取的是应用**设置**——即上面示例里的 `setting` 选项、设置文件（`config/DuckPhpSettings.config.php`）或 `.env`。只在 `$options` 顶层写 `'duckcoverage_enable' => true` **不会**启用 DuckCoverage。应用如果自己重写了 `_Setting()`，也可以由它来回答这个键。
 
 测试列表回调类 `DuckAdminDemo\System\TestLister`：
 
@@ -158,6 +162,19 @@ php cli.php cover --stop            # ④ 停止监听
 - `--watch <组名>` 写入监听标记；从这一刻起，进入应用的每个请求都会被采集到该组。
 - `--play` 会启动内置测试服务器（或指向设置了 `duckcoverage_web_base_url` 的外部服务器），逐行执行回调类 `GetTestList()` 返回的测试指令；每个被回放的请求都会再次采集覆盖率，结束后停止服务器。
 - `--report` 合并该组（或多个组：`--report a b c`）的所有 dump，渲染 HTML 报告。
+
+### 如何判断已进入监视状态
+
+有组正在被监视时，整个应用就处在「监视状态」，下面任一迹象都能看出来：
+
+- `<runtime>/DuckCoverage/DuckCoverage.watching.txt` 存在，内容就是组名。这个文件**本身**就是监视状态：执行 `--stop`（或删掉它）采集即停止。
+- **Web 方式**：每个响应都会带上 header `x-duckcoverage-group: <组名>`，被采集的请求因此能看出进了哪个组。
+- **命令行方式**：会打印红色条幅 `DuckCoverage GROUP <组名>`。（红色条幅 `DuckCoverage running: JSON_FILE: …` 是扩展启用就会打印的，与是否在监视无关。）
+
+监视状态下还有两件事会变：
+
+- 应用的数据配置文件按组隔离：DuckPHP 的 `data_file_json_file` 被改写到 `<runtime>/DuckCoverage/<组名>.DuckPhpData.config.json`，每个组各留一份自己的选项环境。
+- 每个被采集的操作都会得到一个记录名——web 请求是 `MAN-WEB` 加请求 URI（含 POST），命令行是 `MAN-RUN` 加命令行——它会被追加到 `<组名>.list.log`，并用作 dump 文件名。
 
 ### 直接调用（不经 HTTP）
 
@@ -268,7 +285,10 @@ php cli.php cover
 - `#INCLUDE_CALL` 是调用的时候把结果嵌入当前测试列表。
 - `RUN`：如果子命令以 `:` 开始，会去掉这个前导冒号，并把剩下的部分当作绝对命令名，而不是拼上应用的命令前缀。
 - `WEB` 的 uri 会被 `__url()` 函数封装，并在发送前去掉当前 URL 基址。
-- `SETWEB` 设置的钩子在下一个 web 调用时被消费。`pre_curl`、`post_curl` 在本地进程执行（回调参数是 `$ch, $name`）；`pre_webcall`、`post_webcall` 在服务端执行，由 `X-DuckCoverage-BeforeRun` / `X-DuckCoverage-AfterRun` 请求头触发。
+- `SETWEB` 设置的钩子在下一个 web 调用时被消费，而它们**在哪执行决定了默认 phase**：
+  - `pre_curl` / `post_curl` 在**本地**当前进程执行（回调参数是 `$ch, $name`），因此沿用播放列表的**当前 phase**。
+  - `pre_webcall` / `post_webcall` 在**远程**（服务端）执行，由 `X-DuckCoverage-BeforeRun` / `X-DuckCoverage-AfterRun` 请求头触发，因此运行在 **root phase**——不是播放列表当前所在的 phase。
+  - 需要把钩子放到别的 phase，写成 `<phase>!<handler>`，与 `CALL` 同一形式。
 - 空行被忽略。
 
 ## 选项参考
@@ -277,11 +297,9 @@ php cli.php cover
 
 ```php
 public $options = [
-    // 开关由 App::Setting() 读取，因此它属于应用设置。
-    'setting' => [
-        'duckcoverage_enable' => true,
-    ],
     'duckcoverage_test_lister' => null,
+    // 预留：置 true 时 init() 立即返回、跳过全部配置。
+    'duckcoverage_stop_init' => false,
 
     'duckcoverage_data_file_json_file' => 'DuckPhpData-duckcoverage.config.json',
     'duckcoverage_reg_console_command' => true,
@@ -306,7 +324,8 @@ public $options = [
 
 | 选项 | 默认 | 说明 |
 |---|---|---|
-| `duckcoverage_enable` | `true` | 主开关。`Prepare()` 通过 `App::Setting()` 读取它，所以它必须出现在应用**设置**里（`$options['setting']['duckcoverage_enable']`、设置文件或 `.env`）；只写在顶层则 DuckCoverage 完全不生效。`init()` 还会再查一次同名的组件选项，此时顶层写 `false` 会在设置已开启的情况下依然停止采集 |
+| `duckcoverage_enable` | — | 主开关。它由 `App::Setting()` 读取，所以配置在应用设置文件（`config/DuckPhpSettings.config.php`）或 `.env` 里；它不是本包的应用选项 |
+| `duckcoverage_stop_init` | `false` | 预留。置 `true` 时 `init()` 立即返回、跳过全部配置——扩展完全不初始化。与上面的开关无关 |
 | `duckcoverage_test_lister` | `null` | 返回回放清单的可调用对象；其 `GetTestList()` 文本会被 `explainMarco()` 展开 |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | 把额外选项文件移到新位置，隔离配置环境。监听某个组期间会变成 `DuckCoverage/<组名>.DuckPhpData.config.json` |
 | `duckcoverage_reg_console_command` | `true` | 注册命令行，使 `cover` 指令生效。注册发生在开关判断之前，所以关掉开关时 `cover` 仍能提示功能未开启 |
@@ -316,7 +335,7 @@ public $options = [
 | `duckcoverage_report_default_dir` | `'AAAAA.report'` | 多组报告与 `duckcoverage_report_direct => true` 使用的报告目录 |
 | `duckcoverage_web_base_url` | `''` | 外部服务器(如 nginx)基础 URL；空则退回内置测试服务器 |
 | `duckcoverage_server_port` | `8017` | 内置测试服务器端口 |
-| `duckcoverage_server_host` | `''` | 内置测试服务器主机 |
+| `duckcoverage_server_host` | `''` | 内置测试服务器绑定的地址；`''` 即 `127.0.0.1`。回放的请求也发往该地址，只有通配绑定地址（`0.0.0.0`、`::`）会回落到 `127.0.0.1` |
 | `duckcoverage_path_server` | 工程根目录 | 内置服务器服务的项目路径 |
 | `duckcoverage_path_document` | `public` | 内置服务器的文档根目录 |
 | `duckcoverage_homepage` | `/` | 追加在内置服务器 URL 之后的基础 URI |
@@ -398,7 +417,7 @@ vendor/bin/php-cs-fixer fix
 ## 常见问题
 
 **Q：我配了 `duckcoverage_enable`，但什么都没采集到？**
-这个开关由 `App::Setting()` 读取，所以必须放进应用设置（`$options['setting']['duckcoverage_enable'] => true`、设置文件或 `.env`）。只在 `$options` 顶层写 `'duckcoverage_enable' => true` 是不够的，此时 `cover` 会打印 `turn on setting to work: 'duckcoverage_enable'`，也不会产生任何 dump。
+检查 DuckPhp 应用的设置项 `duckcoverage_enable`——`App::Setting('duckcoverage_enable')` 读的就是它。没开启时 `cover` 只会打印 `turn on setting to work: 'duckcoverage_enable'`，也不会产生任何 dump。
 
 **Q：报告里没有我的应用代码？**
 `duckcoverage_path_src` 没配或配错。它默认是相对工程路径的 `src/`，只有你的源码确实在 `<工程根>/src/` 时才正确。请显式配置（推荐绝对路径）。

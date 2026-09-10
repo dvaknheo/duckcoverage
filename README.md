@@ -62,10 +62,6 @@ class DemoApp extends DuckPhp
 {
     public $options = [
         // ... your existing options ...
-        'setting' => [
-            'duckcoverage_enable' => true,
-        ],
-
         'duckcoverage_test_lister' => [TestLister::class, 'GetTestList'],
         //'duckcoverage_report_direct' => false,
         //'duckcoverage_web_base_url' => 'http://www.example.com/',
@@ -81,9 +77,17 @@ class DemoApp extends DuckPhp
 }
 ```
 
+And add the switch to the application setting file:
+
+```php
+<?php
+// config/DuckPhpSettings.config.php
+return [
+    'duckcoverage_enable' => true,
+];
+```
+
 > Unlike many other DuckPHP plugins, DuckCoverage must be initialized in the **root application's** `onPrepare`, as shown above. DuckCoverage options must also be placed in the root application's application options.
->
-> Note where the switch lives: `Prepare()` reads it with `App::Setting('duckcoverage_enable')`, which resolves against the application **setting** — the `setting` option shown above, the setting file (`config/DuckPhpSettings.config.php`) or `.env`. A top-level `'duckcoverage_enable' => true` in `$options` does **not** enable DuckCoverage. An application that overrides `_Setting()` can of course answer for this key itself.
 
 The test-list callback class, `DuckAdminDemo\System\TestLister`, may look like this:
 
@@ -155,6 +159,19 @@ php cli.php cover --stop            # ④ Stop watching
 - `--watch <group>` writes the watching marker; from that moment every request that reaches the application is collected into that group.
 - `--play` starts the built-in test server (or points to the external server configured with `duckcoverage_web_base_url`) and executes the test directives returned by `GetTestList()` one line at a time. Every played request is collected again, and the server is stopped afterward.
 - `--report` merges all dumps for one group (or multiple groups with `--report a b c`) and renders an HTML report.
+
+### How to tell that a group is being watched
+
+While a group is watched the whole application is in *watching state*, and any of these signs will tell you:
+
+- `<runtime>/DuckCoverage/DuckCoverage.watching.txt` exists, and its content is the group name. That file *is* the watching state: `--stop` (or removing it) ends collection.
+- **Web**: every response carries the header `x-duckcoverage-group: <group>`, so a collected request shows which group it went into.
+- **Command line**: the run prints a red banner `DuckCoverage GROUP <group>`. (The red `DuckCoverage running: JSON_FILE: …` banner is printed whenever the extension is enabled, watching or not.)
+
+Two things change while watching:
+
+- The application's data config file is isolated per group: DuckPHP's `data_file_json_file` is redirected to `<runtime>/DuckCoverage/<group>.DuckPhpData.config.json`, so each group keeps its own options environment.
+- Every collected operation is given a recorded name — `MAN-WEB` plus the request URI (and POST data) for web requests, `MAN-RUN` plus the command line for CLI runs — which is appended to `<group>.list.log` and used as the dump file name.
 
 ### Direct calls without HTTP
 
@@ -265,7 +282,10 @@ Macro directives are expanded by `TestListerHelper::explainMarco()` in the text 
 - `#INCLUDE_CALL` invokes a handler and embeds the result in the current test list.
 - `RUN`: if a subcommand starts with `:`, the leading colon is stripped and the rest is used as an absolute command name instead of being prefixed with the application command prefix.
 - The URI in `WEB` is wrapped by the `__url()` function, and the current URL base is stripped before the request is sent.
-- Hooks configured with `SETWEB` are consumed by the next web call. `pre_curl` and `post_curl` run locally in the current process with callback arguments `$ch, $name`; `pre_webcall` and `post_webcall` run on the server, triggered by the `X-DuckCoverage-BeforeRun` / `X-DuckCoverage-AfterRun` request headers.
+- Hooks configured with `SETWEB` are consumed by the next web call, and where they run decides their phase:
+  - `pre_curl` / `post_curl` run **locally** in the current process with callback arguments `$ch, $name`, so they keep the **current phase** of the play list.
+  - `pre_webcall` / `post_webcall` run **remotely** on the server, triggered by the `X-DuckCoverage-BeforeRun` / `X-DuckCoverage-AfterRun` request headers, so they run in the **root phase** — not in the phase the play list is currently in.
+  - To place a hook in another phase, write it as `<phase>!<handler>`, the same form `CALL` uses.
 - Empty lines are ignored.
 
 ## Options Reference
@@ -274,11 +294,9 @@ All options are passed through the DuckPHP application options and use the `duck
 
 ```php
 public $options = [
-    // The switch is read through App::Setting(), so it belongs in the application setting.
-    'setting' => [
-        'duckcoverage_enable' => true,
-    ],
     'duckcoverage_test_lister' => null,
+    // Reserved: when true, init() returns immediately and skips all configuration.
+    'duckcoverage_stop_init' => false,
 
     'duckcoverage_data_file_json_file' => 'DuckPhpData-duckcoverage.config.json',
     'duckcoverage_reg_console_command' => true,
@@ -303,7 +321,8 @@ public $options = [
 
 | Option | Default | Description |
 |---|---|---|
-| `duckcoverage_enable` | `true` | Main switch. `Prepare()` reads it through `App::Setting()`, so it must be present in the application **setting** (`$options['setting']['duckcoverage_enable']`, the setting file, or `.env`); a top-level option alone leaves DuckCoverage inert. The component option of the same name is checked again in `init()`, where a top-level `false` stops collection even if the setting says `true`. |
+| `duckcoverage_enable` | — | Main switch. It is read through `App::Setting()`, so set it in the application setting file (`config/DuckPhpSettings.config.php`) or in `.env`; it is not an application option of this package. |
+| `duckcoverage_stop_init` | `false` | Reserved for the future. When `true`, `init()` returns immediately and skips all configuration — the extension is not set up at all. Unrelated to the switch above. |
 | `duckcoverage_test_lister` | `null` | Callable returning the play list; its `GetTestList()` text is expanded through `explainMarco()`. |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | Moves the additional options file to a new location to isolate the configuration environment. While a group is watched it becomes `DuckCoverage/<group>.DuckPhpData.config.json`. |
 | `duckcoverage_reg_console_command` | `true` | Register the CLI command so that `cover` is available. Registration happens before the enable check, so `cover` can report that the feature is switched off. |
@@ -313,7 +332,7 @@ public $options = [
 | `duckcoverage_report_default_dir` | `'AAAAA.report'` | Report directory used for multi-group reports and for `duckcoverage_report_direct => true`. |
 | `duckcoverage_web_base_url` | `''` | Base URL for an external server such as nginx; when empty, use the built-in test server. |
 | `duckcoverage_server_port` | `8017` | Port for the built-in test server. |
-| `duckcoverage_server_host` | `''` | Host for the built-in test server. |
+| `duckcoverage_server_host` | `''` | Address the built-in test server binds to; `''` means `127.0.0.1`. Played requests are sent to the same host, except that a wildcard bind address (`0.0.0.0`, `::`) falls back to `127.0.0.1`. |
 | `duckcoverage_path_server` | Project root | Project path served by the built-in server. |
 | `duckcoverage_path_document` | `public` | Document root for the built-in server. |
 | `duckcoverage_homepage` | `/` | Base URI appended to the built-in server URL. |
@@ -396,7 +415,7 @@ vendor/bin/php-cs-fixer fix
 
 **Q: I set `duckcoverage_enable` but nothing is collected.**
 
-The switch is read through `App::Setting()`, so it must be in the application setting (`$options['setting']['duckcoverage_enable'] => true`, the setting file or `.env`). Putting `'duckcoverage_enable' => true` at the top level of `$options` is not enough; in that case `cover` prints `turn on setting to work: 'duckcoverage_enable'` and no dump is written.
+Check the DuckPHP application's setting item `duckcoverage_enable` — that is what `App::Setting('duckcoverage_enable')` reads. While it is off, `cover` only prints `turn on setting to work: 'duckcoverage_enable'` and no dump is written.
 
 **Q: My application code is not included in the report.**
 
