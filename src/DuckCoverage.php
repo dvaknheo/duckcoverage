@@ -241,7 +241,7 @@ class DuckCoverage extends ComponentBase
         }
         $request = SuperGlobal::_()->_SERVER('REQUEST_URI', '');
         $post = SuperGlobal::_()->_POST();
-        $request .= $post ? ''.http_build_query($post) : '';
+        $request .= $post ? ' '.http_build_query($post) : '';
         $request = 'MAN-WEB '.$request;
         return "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
     }
