@@ -82,7 +82,8 @@ class DuckCoverage extends ComponentBase
         if (!App::_()->isRoot()) {
             return;
         }
-        if (App::_()->options['duckcoverage_reg_console_command'] ?? true) {
+        if (App::_()->options['duckcoverage_reg_console_command'] ?? true) {           
+            PhaseContainer::_()->addPublicClasses([Console::class => true]);
             App::_()->regConsoleCommand(static::class, 'command_');
         }
         if (!App::Setting('duckcoverage_enable', false)) {
