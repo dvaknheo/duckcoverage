@@ -82,7 +82,8 @@ class DuckCoverage extends ComponentBase
         if (!App::_()->isRoot()) {
             return;
         }
-        if (App::_()->options['duckcoverage_reg_console_command'] ?? true) {           
+        if (App::_()->options['duckcoverage_reg_console_command'] ?? true) {
+            PhaseContainer::_()->addPublicClasses([static::class => true]);
             PhaseContainer::_()->addPublicClasses([Console::class => true]);
             App::_()->regConsoleCommand(static::class, 'command_');
         }
@@ -806,8 +807,8 @@ trait DuckCoverage_HttpClientTrait
             curl_setopt($ch, CURLOPT_COOKIE, implode('; ', $cookie_str));
         }
 
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
         $this->prepareCurl($ch);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
         $data = curl_exec($ch);
