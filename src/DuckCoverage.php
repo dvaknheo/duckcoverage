@@ -23,9 +23,8 @@ class DuckCoverage extends ComponentBase
     use DuckCoverage_HttpServerTrait;
     use DuckCoverage_HttpClientTrait;
 
+    const VERSION = '1.0.1';
     public $options = [
-        // 停止 init 阶段(留给未来使用)：置 true 时 init() 直接返回，不做任何配置。
-        // 注意与开关 duckcoverage_enable 无关——那个开关走 App::Setting()，见 beforeInit()。
         'duckcoverage_stop_init' => false,
         'duckcoverage_data_file_json_file' => 'DuckPhpData-duckcoverage.config.json',
         'duckcoverage_reg_console_command' => true,
@@ -38,6 +37,9 @@ class DuckCoverage extends ComponentBase
 
         'duckcoverage_web_base_url' => '',
         // 外部服务器(如 nginx)基础 URL,如 http://admin.duckphp-local.com/ ;空则退回内部测试服务器
+        'duckcoverage_curl_connecttimeout' => 10,
+        'duckcoverage_curl_timeout' => 30,
+
         'duckcoverage_server_port' => 8017,
         'duckcoverage_server_host' => '',
         'duckcoverage_path_server' => '',
@@ -288,7 +290,7 @@ class DuckCoverage extends ComponentBase
         $this->stopServer();
     }
     /**
-     * tests group. use --help for more.
+     * DuckCoverage commands form dvaknheo/duckcoverage
      */
     public function command_cover()
     {
@@ -807,8 +809,8 @@ trait DuckCoverage_HttpClientTrait
             curl_setopt($ch, CURLOPT_COOKIE, implode('; ', $cookie_str));
         }
 
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $this->options['duckcoverage_curl_connecttimeout']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->options['duckcoverage_curl_timeout']);
         $this->prepareCurl($ch);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
         $data = curl_exec($ch);
