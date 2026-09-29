@@ -17,6 +17,7 @@ class TestListerHelper
 
     protected $is_data_inited = false;
     protected $phase = null;
+    protected $last_phase = null;
     protected $cmd_prefix = null;
     protected $url_prefix = null;
     public function getChildList($child)
@@ -24,7 +25,7 @@ class TestListerHelper
         $list = '';
         $last_phase = App::Phase();
         App::_()->toThisChild($child);
-        $callback = App::_()->options['duckcoverage_test_lister'];
+        $callback = App::_()->options['duckcoverage_test_lister'] ?? null;
         if ($callback) {
             $list = ($callback)();
             $list = $this->explainMarco($list);
@@ -64,11 +65,12 @@ class TestListerHelper
     protected function doPhaseBegin()
     {
         $phase = App::Phase();
+        $this->last_phase = App::_()->getLastPhase();
         return "PHASE $phase";
     }
     protected function doPhaseEnd()
     {
-        $last_phase = App::_()->getLastPhase();
+        $last_phase = $this->last_phase;
         return "PHASE $last_phase";
     }
     protected function doIncludeCall(string $line)

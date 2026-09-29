@@ -431,7 +431,7 @@ trait DuckCoverage_CommandTrait
         if (empty($request)) {
             return;
         }
-        echo "\n\033[42;30m".$request."\033[0m\n";
+        echo "\033[42;30m".$request."\033[0m\n";
 
         $argv = explode(" ", $request);
         $this->current_name = "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
