@@ -85,8 +85,7 @@ class DuckCoverage extends ComponentBase
             return;
         }
         if (App::_()->options['duckcoverage_reg_console_command'] ?? true) {
-            PhaseContainer::_()->addPublicClasses([static::class => true]);
-            PhaseContainer::_()->addPublicClasses([Console::class => true]);
+            PhaseContainer::_()->addSharedClasses([static::class => true, Console::class => true]);
             App::_()->regConsoleCommand(static::class, 'command_');
         }
         if (!App::Setting('duckcoverage_enable', false)) {
@@ -114,7 +113,7 @@ class DuckCoverage extends ComponentBase
         }
 
         App::_()->options['ext'][static::class] = true;
-        PhaseContainer::_()->addPublicClasses([static::class => true]);
+        PhaseContainer::_()->addSharedClasses([static::class => true]);
     }
 
     protected function moveDateJsonFile()
