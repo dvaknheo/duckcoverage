@@ -813,6 +813,9 @@ trait DuckCoverage_HttpClientTrait
         $this->prepareCurl($ch);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
         $data = curl_exec($ch);
+        if($data === false){
+            echo "curl_file_get_contents failed: " . curl_error($ch) ."\n";
+        }
         if (curl_errno($ch) === CURLE_OPERATION_TIMEDOUT) {
             echo "curl_file_get_contents timeout";
             return false;
