@@ -119,14 +119,16 @@ class GroupCoverage
     }
     protected function post_end()
     {
-        $path_dump = $this->current_path_dump;
-        @mkdir($path_dump);
-        $path_dump .= $this->current_group;
-        @mkdir($path_dump);
+        $path_dump = $this->current_path_dump. $this->current_group;
+        @mkdir($path_dump,0777,true);
+        @chmod($path_dump, 0777);
         $file = (string)  $path_dump. DIRECTORY_SEPARATOR . $this->make_filename($this->current_name);
         (new ReportOfPHP)->process($this->coverage, $file);
         $ext = "\n// ".$this->current_name ."\n";
         file_put_contents($file, $ext, FILE_APPEND);
+        $perms = fileperms($file);
+        chmod($file, $perms | 0002);
+
         $this->is_end = true;
     }
     protected function make_filename($name)

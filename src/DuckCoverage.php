@@ -147,7 +147,8 @@ class DuckCoverage extends ComponentBase
         $this->current_path_src = $is_abs ? $this->options['duckcoverage_path_src'] : $path_project . $this->options['duckcoverage_path_src'];
         $this->current_path_dump = $this->options['duckcoverage_path'];
 
-        @mkdir($this->options['duckcoverage_path']);
+        @mkdir($this->options['duckcoverage_path'], 0777, true);
+        @chmod($this->options['duckcoverage_path'], 0777);
         // if ($this->options['duckcoverage_reg_console_command']) {
         //     App::_()->regConsoleCommand(static::class, 'command_');
         // }
@@ -415,7 +416,10 @@ EOT;
     {
         $this->getRunner()->doEnd();  // @codeCoverageIgnore
         if ($this->current_group) {
-            file_put_contents($this->options['duckcoverage_path'].$this->current_group.'.list.log', $this->current_name."\n", FILE_APPEND);
+            $file = $this->options['duckcoverage_path'].$this->current_group.'.list.log';
+            @touch($file);
+            @chmod($file, 0666);
+            file_put_contents($file, $this->current_name."\n", FILE_APPEND);
         }
     }
     protected function createReport($groups, $path_src, $path_dump, $path_report)
