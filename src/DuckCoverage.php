@@ -391,7 +391,7 @@ EOT;
         $this->current_group = null;
         $name = $this->watchingGetName();
         @unlink($this->options['duckcoverage_path'] . 'DuckCoverage.watching.txt');
-        @unlink($this->options['duckcoverage_path'] . basename($name) . '.watch.lock');
+        @unlink($this->options['duckcoverage_path'] . basename((string)$name) . '.watch.lock');
     }
     protected function watchingGetName()
     {
