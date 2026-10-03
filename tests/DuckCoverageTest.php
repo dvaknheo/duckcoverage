@@ -448,8 +448,8 @@ RUN mycmd {ARG}
 RUN :mycmd
 
 CALL @bad
-CALL !is_string var=ok value=ok
-CALL is_string var=ok value=ok
+CALL !is_string var=ok&value=ok
+CALL is_string var=ok&value=ok
 CALL {static}->func name=n1
 CALL {static}@func name=n2
 CALL {static}@func
