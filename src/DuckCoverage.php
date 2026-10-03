@@ -465,7 +465,14 @@ trait DuckCoverage_CommandTrait
     {
         @list($uri, $poststr, $method) = $argv;
         $uri = __url($uri);
-        $uri = substr($uri, strlen($this->url_base) - 1);
+        // 相对 uri 会被 __url() 拼上 url_base(CLI 下是 /bin/cli.php 这样的脚本路径),
+        // 这里把它切掉、留下站点相对路径。
+        // 但 __url() 对「以 / 开头的绝对 uri」是原样返回的,那种情况下再切就会把路径啃掉一截:
+        // 例如 '/user/register' 被切掉 11 个字符变成 'er',最终请求打到
+        // http://<主机名>er 这种诡异的地址上(DNS 直接解析失败),而且不报错、只是静默地少了请求。
+        if ($this->url_base !== '' && strpos($uri, $this->url_base) === 0) {
+            $uri = substr($uri, strlen($this->url_base) - 1);
+        }
 
         $base_url = (string) ($this->options['duckcoverage_web_base_url'] ?? '');
         if ($base_url === '') {
