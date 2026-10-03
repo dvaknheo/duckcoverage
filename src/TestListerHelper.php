@@ -6,7 +6,7 @@
 
 namespace DuckCoverage;
 
-use DuckPhp\Component\RouteLister;
+use DuckPhp\Ext\RouteLister;
 use DuckPhp\Core\App;
 use DuckPhp\Core\Console;
 use DuckPhp\Core\SingletonExTrait;
