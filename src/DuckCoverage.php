@@ -510,7 +510,15 @@ trait DuckCoverage_CommandTrait
     }
     protected function explainRun(array $argv)
     {
-        $sub_cmd = array_shift($argv);
+        // 空 RUN 行(没有命令名)没有可执行的东西,直接跳过。
+        // 注意不能直接 strpos($sub_cmd, ':'):空数组时 array_shift() 返回 null,
+        // 而本文件是 declare(strict_types=1),传 null 会直接抛 TypeError
+        // (不是 deprecation,也不会被 dev_error_handler 接住),整个 play 就此中断。
+        $sub_cmd = (string)array_shift($argv);
+        if ($sub_cmd === '') {
+            echo "Skip empty RUN\n";
+            return;
+        }
         $pos = strpos($sub_cmd, ":");
         if (false === $pos) {
             $sub_cmd = App::_()->getThisCommandPrefix() . $sub_cmd;

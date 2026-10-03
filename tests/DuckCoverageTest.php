@@ -242,6 +242,23 @@ EOT;
         $this->assertSame([], $warnings, '无参数的 PHASE 行不应触发 PHP 警告');
         $this->assertSame('', \DuckPhp\Core\App::Phase());
     }
+
+    /**
+     * 回归:空 RUN 行(没有命令名)。
+     * 本文件是 declare(strict_types=1),原来 array_shift([]) 得到 null,
+     * strpos(null, ':') 直接抛 TypeError(不是 deprecation,dev_error_handler 接不住),
+     * 会让整个 play 当场中断。
+     */
+    public function testBareRunLine()
+    {
+        DuckCoverageEx::_()->stop = true;   // 本用例不该走到 doBegin/doEnd
+
+        ob_start();
+        DuckCoverageEx::_()->readCommand('RUN');
+        $out = (string)ob_get_clean();
+
+        $this->assertStringContainsString('Skip empty RUN', $out);
+    }
 }
 class DuckCoverageEx extends DuckCoverage
 {
