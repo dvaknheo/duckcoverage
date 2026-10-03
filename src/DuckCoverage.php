@@ -454,7 +454,11 @@ trait DuckCoverage_CommandTrait
     }
     protected function explainPhase(array $argv)
     {
-        $param = $argv[0];
+        // 根 phase 的 phase 名就是空字符串(合法),而 explainMarco() 会 rtrim 掉行尾空白,
+        // 所以 "#PHASE_END" 回到根 phase 时展开出来的是无参数的 "PHASE" 行。
+        // 因此不能直接取 $argv[0](会 Undefined array key 0,触发 E_WARNING);
+        // 无参数按 doPhaseEnd() 的语义视为"切回空 phase"。
+        $param = $argv[0] ?? '';
         App::Phase($param);
     }
     protected function explainWeb(array $argv)

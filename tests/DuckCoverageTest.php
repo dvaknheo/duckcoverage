@@ -211,6 +211,37 @@ EOT;
 
         file_put_contents($path.'public/index.php',"<"."?php declare(strict_types=1);\n".$str);
     }
+
+    /**
+     * 回归:根 phase 的 phase 名就是空字符串(合法),而 explainMarco() 会 rtrim 掉行尾空白,
+     * 所以 "#PHASE_END" 回到根 phase 时展开出来的是**无参数**的 "PHASE" 行。
+     * explainPhase() 原来直接取 $argv[0],于是 Undefined array key 0 触发 E_WARNING。
+     */
+    public function testBarePhaseLine()
+    {
+        // 1) 先确认这条行确实是无参数的 PHASE(空 phase 名被 rtrim 掉了)。
+        //    进程隔离(processIsolation)保证这里是全新的单例,last_phase 为 null。
+        $expanded = trim((string)\DuckCoverage\TestListerHelper::_()->explainMarco("#PHASE_END\n"));
+        $this->assertSame('PHASE', $expanded);
+
+        // 2) 无参数的 PHASE 行不应触发任何 PHP 警告,且语义等价于「切回空 phase」
+        $warnings = [];
+        set_error_handler(function ($errno, $errstr) use (&$warnings) {
+            $warnings[] = $errstr;
+            return true;    // 自己吞掉,不交给 PHPUnit 当失败处理
+        });
+        try {
+            \DuckPhp\Core\App::Phase('some_phase');
+            $this->assertSame('some_phase', \DuckPhp\Core\App::Phase());
+
+            DuckCoverageEx::_()->readCommand('PHASE');
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertSame([], $warnings, '无参数的 PHASE 行不应触发 PHP 警告');
+        $this->assertSame('', \DuckPhp\Core\App::Phase());
+    }
 }
 class DuckCoverageEx extends DuckCoverage
 {
