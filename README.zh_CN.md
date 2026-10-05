@@ -246,8 +246,53 @@ php cli.php cover
 | `<runtime>/DuckCoverage/<组名>.report/` | 单组报告：`--report <组名>` 与 `--go <组名>`，且 `duckcoverage_report_direct => false` |
 | `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/` | `--report a b c`（多组），或任何 `duckcoverage_report_direct => true` 的报告 |
 | `<runtime>/DuckCoverage/<组名>.DuckPhpData.config.json` | 监听某个组期间使用的按组 DuckPHP 数据文件 |
+| `<报告目录>/report.json` | 每份报告都会输出 —— 同一份报告的机器可读版本（见下） |
 
 服务端还会在响应里带上两个诊断头：`x-duckcoverage-group`（这次请求被采集到的组）与 `x-duckcoverage-datafile`（正在使用的数据文件）。
+
+## 机器可读报告（`report.json`）
+
+每份报告的目录里，`index.html` 旁边都会有一份 `report.json`，脚本可以直接列出没测到的行、对比两次运行，不必再去抓 HTML。它是确定性的：文件与目录按 path 排序、只写相对路径、每个计数都带总数——这样就能区分"覆盖率变了"和"分母变了"。
+
+```json
+{
+  "schema": "duckcoverage-report/1",
+  "generated_at": "2026-10-04T12:34:56+00:00",
+  "generator": { "name": "duckcoverage", "version": "1.0.1", "php": "8.2.32", "coverage_driver": "xdebug-3.2.0" },
+  "root": "src/",
+  "groups": ["g1"],
+  "dumps_merged": 494,
+  "totals": { "files": 88, "lines": { "executable": 4210, "executed": 3281, "percent": 77.93 } },
+  "directories": [ { "path": "src/User", "files": 12, "lines": { "executable": 490, "executed": 418, "percent": 85.22 } } ],
+  "files": [
+    {
+      "path": "src/User/Controller/AdminController.php",
+      "dir": "src/User/Controller",
+      "app": "User",
+      "sha1": "9f2c…",
+      "loaded": true,
+      "lines": { "executable": 37, "executed": 28, "percent": 75.68 },
+      "functions": { "total": 3, "covered": 2, "percent": 66.67 },
+      "classes": { "total": 1, "covered": 1, "percent": 100.0 },
+      "traits": { "total": 0, "covered": 0, "percent": 0.0 },
+      "uncovered_lines": [43, 44, 45, 48, 51],
+      "function_items": [
+        { "name": "delete", "class": "AdminController", "start": 42, "end": 51, "executable": 6, "executed": 0, "covered": false }
+      ],
+      "line_map": { "15": 1, "16": 1, "43": -1, "44": -1, "48": -1 }
+    }
+  ],
+  "ignored_files": [ { "path": "src/System/TestLister.php", "reason": "no executable lines (@codeCoverageIgnore or empty file)" } ]
+}
+```
+
+- `path` 相对工程根且保留全部目录（绝不是只有 basename）；`dir` 是它所在目录，`app` 是源码根下的第一级目录。
+- `line_map` 是"行号 → `1` 已执行 / `-1` 可执行未执行 / `-2` dead code"；不可执行的行不出现。`uncovered_lines` 就是所有 `-1` 行的升序列表。
+- `lines` / `functions` / `classes` / `traits` 一律同时给出 `executable`/`total`、已覆盖计数和 `percent`。
+- `functions` 统计具名函数与方法（含 trait 方法）；`covered` 表示该单元所有可执行行都执行过。`function_items` 给出每个单元的 `start`/`end` 行与所属 `class`。
+- `loaded` 表示采集期间驱动到底有没有报告过这个文件——`false` 意味着它**根本没被加载**，这与"加载了但 0%"是两回事。
+- `ignored_files` 列出没有可执行行的文件（整文件 `@codeCoverageIgnore`，或空文件）。
+- 同样的字段口径也写在 JSON 自身的 `definitions` 里。
 
 ## 测试指令参考
 
@@ -363,10 +408,11 @@ public $options = [
 | 类 | 职责 |
 |---|---|
 | `DuckCoverage\DuckCoverage` | DuckPHP 扩展本体：生命周期钩子、CLI 命令、指令解释器、内置 HTTP 服务器与 curl 客户端（后两者是 trait） |
-| `DuckCoverage\GroupCoverage` | 唯一直接接触 `phpunit/php-code-coverage` 的地方：`doBegin()` / `doEnd()` / `createReport()`、dump 命名、合并、部分覆盖补全 |
+| `DuckCoverage\GroupCoverage` | 采集、合并与报告：`doBegin()` / `doEnd()` / `createReport()`、dump 命名、合并、部分覆盖补全 |
+| `DuckCoverage\CoverageJsonReport` | 生成 HTML 报告旁边那份机器可读的 `report.json`：路径、计数、未覆盖行、函数方法统计。只读覆盖率数据 |
 | `DuckCoverage\TestListerHelper` | 生成与展开测试清单：宏指令，以及路由 / 命令 / 组件清单生成 |
 
-`GroupCoverage` 在采集期间会 `doPause()` 掉 `LibCoverage`，结束后 `doResume()`，因此两个工具可以在同一进程内共存。
+直接接触 `phpunit/php-code-coverage` 的是 `GroupCoverage` 与 `CoverageJsonReport` 两个类，动底层 API 时两边都要看。`GroupCoverage` 在采集期间会 `doPause()` 掉 `LibCoverage`，结束后 `doResume()`，因此两个工具可以在同一进程内共存。
 
 ## 相关方法
 

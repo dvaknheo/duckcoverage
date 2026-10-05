@@ -243,8 +243,53 @@ All paths below are relative to `<runtime>` (DuckPHP's `path_runtime`, `runtime/
 | `<runtime>/DuckCoverage/<group>.report/` | a single-group report: `--report <group>`, and `--go <group>`, with `duckcoverage_report_direct => false` |
 | `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/` | `--report a b c` (multiple groups), or any report with `duckcoverage_report_direct => true` |
 | `<runtime>/DuckCoverage/<group>.DuckPhpData.config.json` | the per-group DuckPHP data file used while a group is watched |
+| `<report dir>/report.json` | every report — the machine-readable version of the same report (see below) |
 
 The server also answers every request with two diagnostic headers: `x-duckcoverage-group` (the group the request was collected into) and `x-duckcoverage-datafile` (the data file in use).
+
+## Machine-readable report (`report.json`)
+
+Every report directory gets a `report.json` next to `index.html`, so scripts can list untested lines and diff two runs without scraping HTML. It is deterministic: files and directories are sorted by path, only relative paths are written, and every count comes with its total so "coverage changed" can be told apart from "the denominator changed".
+
+```json
+{
+  "schema": "duckcoverage-report/1",
+  "generated_at": "2026-10-04T12:34:56+00:00",
+  "generator": { "name": "duckcoverage", "version": "1.0.1", "php": "8.2.32", "coverage_driver": "xdebug-3.2.0" },
+  "root": "src/",
+  "groups": ["g1"],
+  "dumps_merged": 494,
+  "totals": { "files": 88, "lines": { "executable": 4210, "executed": 3281, "percent": 77.93 } },
+  "directories": [ { "path": "src/User", "files": 12, "lines": { "executable": 490, "executed": 418, "percent": 85.22 } } ],
+  "files": [
+    {
+      "path": "src/User/Controller/AdminController.php",
+      "dir": "src/User/Controller",
+      "app": "User",
+      "sha1": "9f2c…",
+      "loaded": true,
+      "lines": { "executable": 37, "executed": 28, "percent": 75.68 },
+      "functions": { "total": 3, "covered": 2, "percent": 66.67 },
+      "classes": { "total": 1, "covered": 1, "percent": 100.0 },
+      "traits": { "total": 0, "covered": 0, "percent": 0.0 },
+      "uncovered_lines": [43, 44, 45, 48, 51],
+      "function_items": [
+        { "name": "delete", "class": "AdminController", "start": 42, "end": 51, "executable": 6, "executed": 0, "covered": false }
+      ],
+      "line_map": { "15": 1, "16": 1, "43": -1, "44": -1, "48": -1 }
+    }
+  ],
+  "ignored_files": [ { "path": "src/System/TestLister.php", "reason": "no executable lines (@codeCoverageIgnore or empty file)" } ]
+}
+```
+
+- `path` is relative to the project root and keeps every directory (never a bare basename); `dir` is its directory, `app` the first directory under the source root.
+- `line_map` maps line number → `1` executed, `-1` executable but not executed, `-2` dead code; lines that are not executable are absent. `uncovered_lines` is the sorted list of `-1` lines.
+- `lines` / `functions` / `classes` / `traits` always carry `executable`/`total` plus the covered count and a `percent`.
+- `functions` counts named functions and methods (including trait methods); `covered` means every executable line of that unit was executed. `function_items` gives the same per unit, with `start`/`end` lines and `class`.
+- `loaded` tells whether the driver reported the file at all while collecting — `false` means the file was never even loaded, which is different from "loaded but 0%".
+- `ignored_files` lists files with no executable lines (whole-file `@codeCoverageIgnore`, or empty files).
+- The same field semantics are echoed inside the JSON itself under `definitions`.
 
 ## Test Directive Reference
 
@@ -360,10 +405,11 @@ Three classes make up the package:
 | Class | Role |
 |---|---|
 | `DuckCoverage\DuckCoverage` | The DuckPHP extension: lifecycle hooks, CLI command, directive interpreter, built-in HTTP server and curl client (the latter two are traits). |
-| `DuckCoverage\GroupCoverage` | The only place that talks to `phpunit/php-code-coverage`: `doBegin()` / `doEnd()` / `createReport()`, dump naming, merging, and the partial-coverage fix-up. |
+| `DuckCoverage\GroupCoverage` | Collecting, merging and reporting: `doBegin()` / `doEnd()` / `createReport()`, dump naming, merging, and the partial-coverage fix-up. |
+| `DuckCoverage\CoverageJsonReport` | Formats the machine-readable `report.json` that sits next to the HTML report: paths, counts, uncovered lines, units. Reads coverage data only. |
 | `DuckCoverage\TestListerHelper` | Builds and expands test lists: macros, plus generated route / command / component lists. |
 
-`GroupCoverage` pauses `LibCoverage` while it collects (`doPause()` / `doResume()`), so the two tools can coexist in one process.
+`GroupCoverage` and `CoverageJsonReport` are the two classes that talk to `phpunit/php-code-coverage`; when its API changes, check both. `GroupCoverage` pauses `LibCoverage` while it collects (`doPause()` / `doResume()`), so the two tools can coexist in one process.
 
 ## Related Methods
 

@@ -373,11 +373,12 @@ EOT;
         } else {
             $path_report = $path_report . $this->options['duckcoverage_report_default_dir'];
         }
-        $this->createReport($groups, $this->current_path_src, $this->current_path_dump, $path_report);
+        $stats = $this->createReport($groups, $this->current_path_src, $this->current_path_dump, $path_report);
         $time_end = microtime(true);
         $time_cost = $time_end - $time_begin;
         $time_cost = sprintf('%0.3f', $time_cost);
         echo "time_cost   : $time_cost seconds \noutput path : $path_report \n";
+        echo "json report : " . ($stats['json_report'] ?? '') . " \n";
     }
     ////]]]]
     ////[[[[
@@ -422,9 +423,14 @@ EOT;
             file_put_contents($file, $this->current_name."\n", FILE_APPEND);
         }
     }
+    /**
+     * @param array<string> $groups
+     * @return array<string, mixed>
+     */
     protected function createReport($groups, $path_src, $path_dump, $path_report)
     {
-        return $this->getRunner()->createReport($groups, $path_src, $path_dump, $path_report);
+        // 传工程根：JSON 报告里的路径写成相对工程根，方便跨机器、跨次 diff
+        return $this->getRunner()->createReport($groups, $path_src, $path_dump, $path_report, (string)App::_()->getProjectPath());
     }
     ////]]]]
 }
@@ -836,7 +842,7 @@ trait DuckCoverage_HttpClientTrait
         $this->prepareCurl($ch);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
         $data = curl_exec($ch);
-        if($data === false){
+        if ($data === false) {
             echo "curl_file_get_contents failed: " . curl_error($ch) ."\n";
         }
         if (curl_errno($ch) === CURLE_OPERATION_TIMEDOUT) {

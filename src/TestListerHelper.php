@@ -6,10 +6,10 @@
 
 namespace DuckCoverage;
 
-use DuckPhp\Ext\RouteLister;
 use DuckPhp\Core\App;
 use DuckPhp\Core\Console;
 use DuckPhp\Core\SingletonExTrait;
+use DuckPhp\Ext\RouteLister;
 
 class TestListerHelper
 {
