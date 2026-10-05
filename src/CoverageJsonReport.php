@@ -129,7 +129,9 @@ class CoverageJsonReport
             sort($uncovered);
 
             $dir = $this->dirOf($path);
-            $sig = $this->signatureLines($file, $lines);
+            // 签名行：GroupCoverage 已经把它们从 lineCoverage 里剔除，这里优先用传进来的那份
+            // （直接调用 render() 的单元测试没经过剔除，就自己算）
+            $sig = $context['sig_lines'][$file] ?? $this->signatureLines($file, $lines);
             $files[] = [
                 'path' => $path,
                 'dir' => $dir,
@@ -208,7 +210,7 @@ class CoverageJsonReport
             'groups' => array_values($context['groups']),
             'dumps_merged' => (int)$context['dumps_merged'],
             'definitions' => [
-                'executable_lines' => 'lines reported by the coverage driver, plus executable lines found by static analysis in the source root (excluding @codeCoverageIgnore lines)',
+                'executable_lines' => 'lines reported by the coverage driver, plus executable lines found by static analysis in the source root (excluding @codeCoverageIgnore lines, and minus the signature lines listed in sig, which the driver never reports)',
                 'line_map' => [
                     '1' => 'executed',
                     '-1' => 'executable, not executed',
@@ -216,7 +218,7 @@ class CoverageJsonReport
                 ],
                 'functions' => 'named functions and methods, including trait methods; covered = every executable line of the unit was executed',
                 'loaded' => 'the file was reported by the driver, i.e. it was loaded while collecting',
-                'sig' => 'signature lines: executable lines that the driver never marks as executed (for example a default value inside a multi-line function signature); listed only when every executable line outside the signature of that declaration was executed',
+                'sig' => 'signature lines: executable lines that the driver never marks as executed (for example a default value inside a multi-line function signature); listed only when every executable line outside the signature of that declaration was executed. These lines are dropped from line coverage before rendering, so they are not counted as executable anywhere (they do not appear in executable counts, line_map or unc)',
             ],
             'totals' => $totals,
             'directories' => $directories,
@@ -355,10 +357,13 @@ class CoverageJsonReport
      *       return;             <- 只有这一行被执行
      *   }
      *
+     * 公开：GroupCoverage 在补坑后用它把这些行从 lineCoverage 里剔除，
+     * 让它们不再计入可执行行（否则文件永远到不了 100%）。
+     *
      * @param array<int, array<string,string>|null> $lines 该文件的行覆盖(与 line_map 同源)
      * @return array<int,int> 升序的签名行行号
      */
-    protected function signatureLines(string $file, array $lines): array
+    public function signatureLines(string $file, array $lines): array
     {
         $source = @file_get_contents($file);
         if ($source === false) {

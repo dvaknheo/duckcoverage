@@ -184,7 +184,7 @@ class GroupCoverage
 
         // 补全部分覆盖文件：未执行的可执行行加入 lineCoverage（空数组），
         // 否则报告只统计已执行行，部分覆盖文件会错误显示为 100%
-        $this->fillPartialCoveredFiles($coverage);
+        $sig_lines = $this->fillPartialCoveredFiles($coverage);
         $stats = $this->renderReport($coverage, $path_report);
         $report = CoverageJsonReport::_()->render($coverage, [
             'groups' => $groups,
@@ -194,6 +194,7 @@ class GroupCoverage
             'loaded_files' => $loaded_files,
             'files' => $this->sourceFiles($path_src),
             'driver_class' => $this->driver_class,
+            'sig_lines' => $sig_lines,
         ]);
         $stats['json_report'] = CoverageJsonReport::_()->write($report, $path_report);
         $stats['dumps_merged'] = $dumps_merged;
@@ -273,7 +274,7 @@ class GroupCoverage
      * 修复：使用 ParsingFileAnalyser(true, true) 来正确处理 @codeCoverageIgnore 注解
      *       对于被忽略的行，不填充空数组，让它们保持未填充状态
      */
-    protected function fillPartialCoveredFiles(CodeCoverage $coverage): void
+    protected function fillPartialCoveredFiles(CodeCoverage $coverage): array
     {
         $analyser = new \SebastianBergmann\CodeCoverage\StaticAnalysis\ParsingFileAnalyser(true, true);
         $lineCoverage = $coverage->getData()->lineCoverage();
@@ -306,7 +307,28 @@ class GroupCoverage
             }
         }
 
+        // 补坑之后才算签名行（这时"函数体其余行是否都执行了"才判得准），
+        // 然后把它们从 lineCoverage 里整个剔除：签名行被静态分析算可执行，
+        // 但驱动永远不会把它标为执行，留着会让文件永远到不了 100%。
+        // 剔除后 HTML / report.json / report.jsonl 三处口径一致。
+        $sig_lines = [];
+        foreach ($filter->files() as $file) {
+            $lines = $lineCoverage[$file] ?? [];
+            if (!$lines) {
+                continue;
+            }
+            $sig = CoverageJsonReport::_()->signatureLines($file, $lines);
+            if (!$sig) {
+                continue;
+            }
+            foreach ($sig as $line) {
+                unset($lineCoverage[$file][$line]);
+            }
+            $sig_lines[$file] = $sig;
+        }
+
         $coverage->getData()->setLineCoverage($lineCoverage);
+        return $sig_lines;
     }
     /**
      * 渲染 HTML 报告并返回行统计

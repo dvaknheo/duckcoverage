@@ -204,7 +204,7 @@ PHP);
         // 与 createReport() 同样顺序：先取 loaded 快照(原始数据)，再补坑，最后出报表
         $loaded = array_keys($coverage->getData(true)->lineCoverage());
         $group_coverage = new CoverageJsonlReportGroupCoverage();
-        $group_coverage->fillPartialCoveredFilesForTest($coverage);
+        $sig_lines = $group_coverage->fillPartialCoveredFilesForTest($coverage);
 
         $report = CoverageJsonReport::_()->render($coverage, [
             'groups' => ['g1', 'g2'],
@@ -214,6 +214,7 @@ PHP);
             'loaded_files' => $loaded,
             'files' => $filter_files,
             'driver_class' => 'SebastianBergmann\\CodeCoverage\\Driver\\Xdebug3Driver',
+            'sig_lines' => $sig_lines,
         ]);
         $file_records = [];
         foreach ($report['files'] as $item) {
@@ -424,7 +425,8 @@ PHP);
         $this->assertSame(['executable' => 1, 'executed' => 1], $unit_lines['App::run']);
         $this->assertSame(['executable' => 1, 'executed' => 0], $unit_lines['App::never']);
         // multi()：签名行 + 方法体，只有方法体命中
-        $this->assertSame(['executable' => 2, 'executed' => 1], $unit_lines['App::multi']);
+        // 签名行已不再计入可执行行(方案 A)，所以这里只剩函数体那一行
+        $this->assertSame(['executable' => 1, 'executed' => 1], $unit_lines['App::multi']);
         // unused()：签名行(默认值) + if 条件 + 两个 return，全都没命中
         $this->assertSame(['executable' => 4, 'executed' => 0], $unit_lines['App::unused']);
         $this->assertSame(['executable' => 0, 'executed' => 0], $unit_lines['App::dead']);
@@ -454,10 +456,10 @@ PHP);
         // 整个方法从没被调用过时不能标签名行(否则会把"没测到"说成"测不到")
         $this->assertNotContains($line_unused_sig, $app['sig']);
         $this->assertNotContains($line_never, $app['sig']);
-        $this->assertContains($line_multi_sig, $app['uncovered_lines']);
+        $this->assertNotContains($line_multi_sig, $app['uncovered_lines']);
         // multi() 方法体那一行是命中的，而文件仍不是 100%：差额正是签名行
         $this->assertSame(1, $app['line_map'][(string)$line_multi_body]);
-        $this->assertSame(-1, $app['line_map'][(string)$line_multi_sig]);
+        $this->assertArrayNotHasKey((string)$line_multi_sig, $app['line_map']);
         $this->assertArrayHasKey('sig', $report['definitions']);
 
         // §5.1 + §11-7：detail=full 时 unc == map 中 -1 的键集合，升序；-2(dead code)保留在 map 里但不进 unc
@@ -681,9 +683,12 @@ class CoverageJsonlReportDriver extends Driver
  */
 class CoverageJsonlReportGroupCoverage extends GroupCoverage
 {
-    public function fillPartialCoveredFilesForTest(CodeCoverage $coverage): void
+    /**
+     * @return array<string, array<int,int>> 被剔除的签名行(路径 => 行号)
+     */
+    public function fillPartialCoveredFilesForTest(CodeCoverage $coverage): array
     {
-        $this->fillPartialCoveredFiles($coverage);
+        return $this->fillPartialCoveredFiles($coverage);
     }
 }
 
