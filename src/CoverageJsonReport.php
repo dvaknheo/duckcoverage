@@ -156,6 +156,8 @@ class CoverageJsonReport
                     'percent' => $this->percent($traits['covered'], $traits['total']),
                 ],
                 'uncovered_lines' => $uncovered,
+                // 签名行：被算成可执行、但驱动永远不会标为已执行的行(见 §5.4 与 signatureLines())
+                'sig' => $this->signatureLines($file, $lines),
                 'function_items' => $functions,
                 'line_map' => $line_map,
             ];
@@ -211,6 +213,7 @@ class CoverageJsonReport
                 ],
                 'functions' => 'named functions and methods, including trait methods; covered = every executable line of the unit was executed',
                 'loaded' => 'the file was reported by the driver, i.e. it was loaded while collecting',
+                'sig' => 'signature lines: executable lines that the driver never marks as executed (for example a default value inside a multi-line function signature); listed only when every executable line outside the signature of that declaration was executed',
             ],
             'totals' => $totals,
             'directories' => $directories,
@@ -330,6 +333,187 @@ class CoverageJsonReport
             }
         }
         return [$executable, $executed];
+    }
+
+    /**
+     * 签名行(规格 §5.4)：被算成可执行、但驱动永远不会标为已执行的"头部行"。
+     *
+     * 判定规则：
+     * - 头部行 = 从 function 关键字所在行，到函数体 "{" 所在行(抽象方法/接口方法等没有函数体的，
+     *   取声明结尾 ";" 所在行)，闭区间；
+     * - 若该声明范围内(头部行除外)的可执行行全部已执行，则头部行里那些从未执行的可执行行就是签名行；
+     * - 同时要求声明范围内至少有一行已执行，否则就是"整个方法从没被调用过"，不能算签名行。
+     *
+     * 典型例子(驱动侧全命中，报表却少一行)：
+     *   public function log(
+     *       $a,
+     *       array $ext = []     <- 静态分析算它可执行，但驱动永远不会执行它
+     *   ) {
+     *       return;             <- 只有这一行被执行
+     *   }
+     *
+     * @param array<int, array<string,string>|null> $lines 该文件的行覆盖(与 line_map 同源)
+     * @return array<int,int> 升序的签名行行号
+     */
+    protected function signatureLines(string $file, array $lines): array
+    {
+        $source = @file_get_contents($file);
+        if ($source === false) {
+            return []; // @codeCoverageIgnore
+        }
+        $tokens = token_get_all($source);
+        $token_lines = $this->tokenLines($tokens);
+        $sig = [];
+        foreach ($this->functionDeclarations($tokens, $token_lines) as $declaration) {
+            foreach ($this->signatureLinesIn($lines, $declaration) as $line) {
+                $sig[$line] = true;
+            }
+        }
+        $ret = array_keys($sig);
+        sort($ret, SORT_NUMERIC);
+        return $ret;
+    }
+
+    /**
+     * 每个 token 的起始行号。token_get_all() 里只有数组形态的 token 自带行号，
+     * 单字符 token(如 "{" / ";")没有行号，要用上一个 token 的结束行推出来。
+     *
+     * @param array<int,mixed> $tokens
+     * @return array<int,int>
+     */
+    protected function tokenLines(array $tokens): array
+    {
+        $lines = [];
+        $line = 1;
+        foreach ($tokens as $index => $token) {
+            if (is_array($token)) {
+                $line = (int)$token[2];
+            }
+            $lines[$index] = $line;
+            if (is_array($token)) {
+                $line = (int)$token[2] + substr_count((string)$token[1], "\n");
+            }
+        }
+        return $lines;
+    }
+
+    /**
+     * 扫描源码里的所有函数/方法声明。T_FUNCTION 同时覆盖具名函数、方法与闭包。
+     *
+     * @param array<int,mixed> $tokens
+     * @param array<int,int> $lines
+     * @return array<int,array{0:int,1:int,2:int}>
+     */
+    protected function functionDeclarations(array $tokens, array $lines): array
+    {
+        $ret = [];
+        foreach ($tokens as $index => $token) {
+            if (is_array($token) && $token[0] === T_FUNCTION) {
+                $ret[] = $this->functionDeclaration($tokens, $lines, (int)$index);
+            }
+        }
+        return $ret;
+    }
+
+    /**
+     * 一处声明的 [头部起始行, 头部结束行, 函数体结束行]。
+     *
+     * 头部 = function 行到函数体的 "{" 行(没有函数体的声明取 ";" 行)；
+     * 函数体结束行 = 与 "{" 配对的 "}" 行。括号计数会跳过参数表、闭包的 use (...)、返回类型里的括号；
+     * 双引号字符串里的 "{$x}" / "${x}" 也参与配对计数，不会让函数体提前结束。
+     *
+     * @param array<int,mixed> $tokens
+     * @param array<int,int> $lines
+     * @return array{0:int,1:int,2:int}
+     */
+    protected function functionDeclaration(array $tokens, array $lines, int $index): array
+    {
+        $count = count($tokens);
+        $head_start = $lines[$index];
+        $depth = 0;
+        $body = 0;
+        for ($i = $index + 1; $i < $count; $i++) {
+            $token = $tokens[$i];
+            if (is_array($token)) {
+                if ($token[0] === T_CURLY_OPEN || $token[0] === T_DOLLAR_OPEN_CURLY_BRACES) {
+                    $depth++; // @codeCoverageIgnore
+                }
+                continue;
+            }
+            if ($token === '(') {
+                $depth++;
+                continue;
+            }
+            if ($token === ')') {
+                $depth--;
+                continue;
+            }
+            if ($depth > 0) {
+                continue;
+            }
+            if ($token === '{') {
+                $body = $i;
+                break;
+            }
+            if ($token === ';') {
+                return [$head_start, $lines[$i], $lines[$i]];
+            }
+        }
+        if ($body === 0) {
+            return [$head_start, $head_start, $head_start]; // @codeCoverageIgnore
+        }
+        $head_end = $lines[$body];
+        $depth = 1;
+        for ($i = $body + 1; $i < $count; $i++) {
+            $token = $tokens[$i];
+            if (is_array($token)) {
+                if ($token[0] === T_CURLY_OPEN || $token[0] === T_DOLLAR_OPEN_CURLY_BRACES) {
+                    $depth++;
+                }
+                continue;
+            }
+            if ($token === '{') {
+                $depth++;
+                continue;
+            }
+            if ($token !== '}') {
+                continue;
+            }
+            $depth--;
+            if ($depth === 0) {
+                return [$head_start, $head_end, $lines[$i]];
+            }
+        }
+        return [$head_start, $head_end, $head_end]; // @codeCoverageIgnore
+    }
+
+    /**
+     * 一个声明里的签名行(见 signatureLines() 的规则)。isset() 对 null 为 false，dead code 不算可执行行。
+     *
+     * @param array<int, array<string,string>|null> $lines
+     * @param array{0:int,1:int,2:int} $declaration
+     * @return array<int,int>
+     */
+    protected function signatureLinesIn(array $lines, array $declaration): array
+    {
+        [$head_start, $head_end, $body_end] = $declaration;
+        $sig = [];
+        $executed = false;
+        for ($line = $head_start; $line <= $body_end; $line++) {
+            if (!isset($lines[$line])) {
+                continue;   // 不存在，或者 dead code
+            }
+            if ($lines[$line] !== []) {
+                $executed = true;
+                continue;
+            }
+            if ($line > $head_end) {
+                // 函数体里有没执行的行：这个声明不是"只差签名行"，不能标签名行
+                return [];
+            }
+            $sig[] = $line;
+        }
+        return $executed ? $sig : [];
     }
 
     /**

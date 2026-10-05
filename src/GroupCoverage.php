@@ -144,10 +144,14 @@ class GroupCoverage
      * $path_root 是工程根，用来把 JSON 里的路径写成"相对工程根"的形式；为空或源码不在其下时，
      * JSON 路径相对源码根，root 记为 '.'。
      *
+     * $jsonl 非空时额外输出 JSONL 报告（键：path/stdout/detail/timestamp，见 CoverageJsonlReport）：
+     * path 为空表示不写文件，stdout=true 表示由调用方把文本写到 stdout。
+     *
      * @param array<string>  $groups
-     * @return array{lines_tested:int, lines_total:int, lines_percent:string, json_report:string}
+     * @param array<string,mixed> $jsonl
+     * @return array{lines_tested:int, lines_total:int, lines_percent:string, json_report:string, dumps_merged:int}
      */
-    public function createReport(array $groups, string $path_src, string $path_dump, string $path_report, string $path_root = ''): array
+    public function createReport(array $groups, string $path_src, string $path_dump, string $path_report, string $path_root = '', array $jsonl = []): array
     {
         $coverage = $this->createCoverage();
         $this->includePath($coverage, $path_src);
@@ -158,8 +162,21 @@ class GroupCoverage
           ],
         ]);
         $dumps_merged = 0;
+        $group_dumps = [];
+        $errors = [];
         foreach ($groups as $group) {
-            $dumps_merged += $this->mergeFromDir($coverage, $path_dump.$group);
+            $dir = $path_dump.$group;
+            $merged = $this->mergeFromDir($coverage, $dir);
+            $group_dumps[$group] = $merged;
+            $dumps_merged += $merged;
+            if ($merged === 0) {
+                // 规格 §4.8：组没有 dump、或组目录不存在，都不要静默吞掉
+                $errors[] = [
+                    'group' => $group,
+                    'msg' => is_dir($dir) ? "group skipped: no dump in {$group}" : "group skipped: dump dir not found: {$group}",
+                    'fatal' => false,
+                ];
+            }
         }
         // 补坑之前先记下"驱动报告过的文件"＝运行时真的被加载过(JSON 的 loaded 字段)。
         // 必须取原始数据：getData() 默认会把"只在 filter 里、从未加载"的文件也补进来。
@@ -169,7 +186,7 @@ class GroupCoverage
         // 否则报告只统计已执行行，部分覆盖文件会错误显示为 100%
         $this->fillPartialCoveredFiles($coverage);
         $stats = $this->renderReport($coverage, $path_report);
-        $stats['json_report'] = CoverageJsonReport::_()->report($coverage, [
+        $report = CoverageJsonReport::_()->render($coverage, [
             'groups' => $groups,
             'dumps_merged' => $dumps_merged,
             'path_src' => $path_src,
@@ -177,7 +194,20 @@ class GroupCoverage
             'loaded_files' => $loaded_files,
             'files' => $this->sourceFiles($path_src),
             'driver_class' => $this->driver_class,
-        ], $path_report);
+        ]);
+        $stats['json_report'] = CoverageJsonReport::_()->write($report, $path_report);
+        $stats['dumps_merged'] = $dumps_merged;
+        if ($jsonl) {
+            // JSONL 是同一份数据的行导向输出：只做变换，不再碰 php-code-coverage
+            $jsonl_report = CoverageJsonlReport::_();
+            $text = $jsonl_report->render($report, $jsonl + ['group_dumps' => $group_dumps, 'errors' => $errors]);
+            if (!empty($jsonl['path'])) {
+                $stats['jsonl_report'] = $jsonl_report->write($text, (string)$jsonl['path']);
+            }
+            if (!empty($jsonl['stdout'])) {
+                $stats['jsonl_text'] = $text;
+            }
+        }
         return $stats;
     }
     /**

@@ -276,6 +276,7 @@ php cli.php cover
       "classes": { "total": 1, "covered": 1, "percent": 100.0 },
       "traits": { "total": 0, "covered": 0, "percent": 0.0 },
       "uncovered_lines": [43, 44, 45, 48, 51],
+      "sig": [20],
       "function_items": [
         { "name": "delete", "class": "AdminController", "start": 42, "end": 51, "executable": 6, "executed": 0, "covered": false }
       ],
@@ -291,8 +292,64 @@ php cli.php cover
 - `lines` / `functions` / `classes` / `traits` 一律同时给出 `executable`/`total`、已覆盖计数和 `percent`。
 - `functions` 统计具名函数与方法（含 trait 方法）；`covered` 表示该单元所有可执行行都执行过。`function_items` 给出每个单元的 `start`/`end` 行与所属 `class`。
 - `loaded` 表示采集期间驱动到底有没有报告过这个文件——`false` 意味着它**根本没被加载**，这与"加载了但 0%"是两回事。
+- `sig` 是**签名行**：函数/方法声明头部里被静态分析算作可执行、但驱动永远不会标记为执行的行，且只在该声明的函数体其余可执行行都已执行时给出。也就是"驱动侧 29/29、报表却是 29/30"里差的那一行。
 - `ignored_files` 列出没有可执行行的文件（整文件 `@codeCoverageIgnore`，或空文件）。
 - 同样的字段口径也写在 JSON 自身的 `definitions` 里。
+
+## 行导向报告（`report.jsonl`）
+
+`report.json` 是一整个大对象：整份读很方便，但流式处理、拼接、diff 都别扭。`report.jsonl` 是同一份数据，只是**一行一个 JSON 对象**——`grep` / `jq` / `diff` 直接可用，写到一半的文件也能逐行解析。
+
+```bash
+# 写文件（相对路径按工程根解析；目录不存在会自动创建）
+php cli.php cover --report g1 g2 --jsonl=runtime/DuckCoverage/report.jsonl
+
+# 裸 --jsonl 写到 <报告目录>/report.jsonl
+php cli.php cover --report g1 g2 --jsonl
+
+# 要行级明细，或者完全不要
+php cli.php cover --report g1 --jsonl=report.jsonl --jsonl-detail=full
+php cli.php cover --report g1 --jsonl=report.jsonl --jsonl-detail=none
+
+# 写到 stdout（管道用）
+php cli.php cover --report g1 g2 --format=jsonl > report.jsonl
+
+# 同一份 dump 跑两次输出逐字节一致，可以直接 diff
+php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
+```
+
+### 记录类型
+
+| `t` | 出现位置 | 用途 |
+|---|---|---|
+| `meta` | 第一行，有且仅有一行 | `schema`、`generator`、`php`、`driver`、`root`、`groups`、`dumps`、`detail`、`created` |
+| `group` | `meta` 之后，每组一行 | `name`、`dumps` |
+| `dir` | 文件记录之前 | `path`、`files`、`lines{executable,executed}` |
+| `file` | 每个文件一行 | `path`、`dir`、`app`、`sha1`、`loaded`、`ignored`、`lines`、`funcs`、`unc`、`sig` |
+| `file_func` | 紧跟其 `file` | `path`、`name`（`Class::method`）、`start`、`end`、`lines` |
+| `file_lines` | 紧跟其 `file`，仅 `detail=full` | `path`、`chunk`、`chunks`、`map` |
+| `ignored` | 任意位置 | `path`、`reason` |
+| `error` | 任意位置 | `group`、`msg`、`fatal` —— 例如某个组一个 dump 都没有 |
+| `total` | 最后一行，有且仅有一行 | `files`、`lines`、`funcs`、`records`、`complete` |
+
+### 格式保证
+
+- 一行一个 JSON 对象，只用 `LF`，UTF-8 无 BOM，行内没有裸换行；每行都能单独通过 `jq -c .`。
+- 每行都有字符串字段 `t`。**消费方遇到未知 `t` 必须忽略该行**，这样以后加记录类型不会破坏兼容。
+- 全文不出现百分比，只给计数（`executable` / `executed`），避免再出现两套百分比口径。
+- 路径一律是相对 `root` 的完整路径，绝不只给 basename。
+- 字段顺序稳定、记录按 `path` 排序，因此同一份 dump 加 `--jsonl-no-timestamp` 时输出逐字节一致。
+- `total` 是完整性哨兵：被截断的文件就是没有 `total` 行。`records` 是各类记录实际写出的条数（`meta`/`total` 这两行也计在内，所以各项之和就是文件行数），可以拿 `grep -c '"t":"file"'` 与 `records.file` 对账。
+- 没有任何覆盖数据时仍然输出 `meta` 与 `total`（`files:0`），绝不输出空文件。
+- 只有在要求 JSONL 时才动退出码：`1` = 文件写失败（原因打到 stderr），`2` = 一个 dump 都没合并。普通 `--report` 的退出码保持原样。
+- `detail`：`uncovered`（默认）额外给 `unc` —— 可执行但未执行的行号升序数组，也就是真正值得补测试的那些行；`full` 额外给 `file_lines` 整份 `map`（`1` 已执行、`-1` 可执行未执行、`-2` dead code；`n` 恒为 `1`，因为本工具只记"有没有执行"而不记次数）；`none` 两者都不给。`unc` 永远等于 `map` 里 `-1` 的集合。
+
+### 需要知道的几件事
+
+- 所有组是先合并再出报告的，所以每条 `file` 记录都是**全组的并集**：`executed` 是并集而不是相加（分母是同一份源码）。目前没有"按组分别输出 file 记录"的模式。
+- `loaded:false`（本次完全没被 include，疑似死代码）与 `executed:0`（加载了但一行没跑到，需要补测试）是两回事。
+- `sig` 是**签名行**：函数/方法声明头部里被静态分析算作可执行、但驱动永远不会标记为执行的行（前提是该声明的函数体其余可执行行都已执行）。也就是"驱动侧 29/29、报表却是 29/30"里那一行，不值得去追；而"整个方法从没被调用过"**不会**出现在这里，因为它的函数体并没有全部执行。
+- `--jsonl-per-group` 与 `--jsonl-compress` 还没实现。
 
 ## 测试指令参考
 
@@ -403,13 +460,14 @@ public $options = [
 
 ## 内部结构
 
-本包由三个类构成：
+本包由这些类构成：
 
 | 类 | 职责 |
 |---|---|
 | `DuckCoverage\DuckCoverage` | DuckPHP 扩展本体：生命周期钩子、CLI 命令、指令解释器、内置 HTTP 服务器与 curl 客户端（后两者是 trait） |
 | `DuckCoverage\GroupCoverage` | 采集、合并与报告：`doBegin()` / `doEnd()` / `createReport()`、dump 命名、合并、部分覆盖补全 |
-| `DuckCoverage\CoverageJsonReport` | 生成 HTML 报告旁边那份机器可读的 `report.json`：路径、计数、未覆盖行、函数方法统计。只读覆盖率数据 |
+| `DuckCoverage\CoverageJsonReport` | 生成 HTML 报告旁边那份机器可读的 `report.json`：路径、计数、未覆盖行、函数方法统计、签名行。只读覆盖率数据 |
+| `DuckCoverage\CoverageJsonlReport` | 把 `report.json` 的数组改写成行导向的 `report.jsonl`：一行一条记录，首行 `meta`、末行 `total`。纯变换，不碰覆盖率数据 |
 | `DuckCoverage\TestListerHelper` | 生成与展开测试清单：宏指令，以及路由 / 命令 / 组件清单生成 |
 
 直接接触 `phpunit/php-code-coverage` 的是 `GroupCoverage` 与 `CoverageJsonReport` 两个类，动底层 API 时两边都要看。`GroupCoverage` 在采集期间会 `doPause()` 掉 `LibCoverage`，结束后 `doResume()`，因此两个工具可以在同一进程内共存。

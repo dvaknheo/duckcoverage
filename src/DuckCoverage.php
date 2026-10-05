@@ -35,6 +35,13 @@ class DuckCoverage extends ComponentBase
         'duckcoverage_report_direct' => false,
         'duckcoverage_report_default_dir' => 'AAAAA.report',
 
+        // JSONL 报告：--jsonl[=FILE] 输出一行一个 JSON 对象；--format=jsonl 则写到 stdout
+        'duckcoverage_jsonl_enable' => false,
+        'duckcoverage_jsonl' => null,                // null = 不写文件；'' = 报告目录下 report.jsonl；其它 = 该路径(相对工程根)
+        'duckcoverage_jsonl_detail' => 'uncovered',  // none | uncovered | full
+        'duckcoverage_jsonl_no_timestamp' => false,  // 省略 meta.created，便于两次输出逐字节 diff
+        'duckcoverage_format' => '',                 // 'jsonl' = JSONL 写到 stdout
+
         'duckcoverage_web_base_url' => '',
         // 外部服务器(如 nginx)基础 URL,如 http://admin.duckphp-local.com/ ;空则退回内部测试服务器
         'duckcoverage_curl_connecttimeout' => 10,
@@ -307,6 +314,7 @@ class DuckCoverage extends ComponentBase
         @mkdir($this->current_path_dump);
 
         $p = Console::_()->getCliParameters();
+        $this->parseJsonlOptions($p);
 
         if (($p['help'] ?? false) || (count($p) === 1)) {
             $str = <<<EOT
@@ -316,6 +324,8 @@ class DuckCoverage extends ComponentBase
 --report a
 --report a b c
 --go {group}
+--jsonl[=FILE] [--jsonl-detail=uncovered|full|none] [--jsonl-no-timestamp]
+--format=jsonl
 EOT;
             echo $str;
             return;
@@ -339,7 +349,7 @@ EOT;
         }
 
         if ($p['report'] ?? false) {
-            echo "reporting...\n";
+            $this->echoHuman("reporting...\n");
             $groups = $p['report'];
             if ($groups === true) {
                 $groups = $this->watchingGetName();
@@ -354,12 +364,65 @@ EOT;
             // 不覆盖 duckcoverage_report_direct：--go 必须等价于 watch + play + report + stop，
             // 报告目录由该选项与组数决定（单组 -> <group>.report，多组/直写 -> report_default_dir）。
             $this->watchingBegin($watch_name);
-            echo "watching {$watch_name}\n";
+            $this->echoHuman("watching {$watch_name}\n");
             $this->play();
-            echo "reporting...\n";
+            $this->echoHuman("reporting...\n");
             $this->doReport([$watch_name]);
             $this->watchingEnd();
-            echo "watched {$watch_name}\n";
+            $this->echoHuman("watched {$watch_name}\n");
+        }
+    }
+    /**
+     * 解析 JSONL 相关开关（规格 §9）
+     *
+     * --jsonl=FILE 写文件（FILE 相对工程根；裸 --jsonl 写在报告目录的 report.jsonl）
+     * --jsonl-detail=none|uncovered|full
+     * --jsonl-no-timestamp   省略 meta.created，便于两次输出逐字节 diff
+     * --format=jsonl         把 JSONL 写到 stdout（只保证 --report 模式下是纯 JSONL）
+     *
+     * @param array<string, mixed> $p
+     */
+    protected function parseJsonlOptions(array $p): void
+    {
+        if (array_key_exists('jsonl', $p)) {
+            $this->options['duckcoverage_jsonl_enable'] = true;
+            $this->options['duckcoverage_jsonl'] = ($p['jsonl'] === true) ? '' : (string)$p['jsonl'];
+        }
+        // 注意：Console::parseCliArgs() 会把命令行里的 '-' 归一成 '_'（--jsonl-detail -> jsonl_detail），
+        // 所以两种键名都接受：下划线那份来自真实命令行，带横线那份便于直接构造参数。
+        $detail = $p['jsonl_detail'] ?? $p['jsonl-detail'] ?? null;
+        if (is_string($detail) && $detail !== '') {
+            $this->options['duckcoverage_jsonl_detail'] = $detail;
+        }
+        if ($p['jsonl_no_timestamp'] ?? $p['jsonl-no-timestamp'] ?? false) {
+            $this->options['duckcoverage_jsonl_no_timestamp'] = true;
+        }
+        if (($p['format'] ?? '') === 'jsonl') {
+            $this->options['duckcoverage_format'] = 'jsonl';
+            $this->options['duckcoverage_jsonl_enable'] = true;
+        }
+    }
+    /**
+     * JSONL 是否写到 stdout
+     */
+    protected function isJsonlStdout(): bool
+    {
+        return $this->options['duckcoverage_format'] === 'jsonl';
+    }
+    /**
+     * JSONL 是否要求输出（文件或 stdout）
+     */
+    protected function isJsonlRequested(): bool
+    {
+        return (bool)$this->options['duckcoverage_jsonl_enable'] || $this->isJsonlStdout();
+    }
+    /**
+     * 人读信息：JSONL 写到 stdout 时一律让路，避免污染管道
+     */
+    protected function echoHuman(string $str): void
+    {
+        if (!$this->isJsonlStdout()) {
+            echo $str;
         }
     }
     protected function doReport($groups)
@@ -377,8 +440,38 @@ EOT;
         $time_end = microtime(true);
         $time_cost = $time_end - $time_begin;
         $time_cost = sprintf('%0.3f', $time_cost);
+        if ($this->isJsonlStdout()) {
+            // stdout 必须是纯 JSONL：人读信息一律让路(只保证 --report 模式)
+            echo (string)($stats['jsonl_text'] ?? '');
+            $this->exitIfJsonlIncomplete($stats);
+            return;
+        }
         echo "time_cost   : $time_cost seconds \noutput path : $path_report \n";
         echo "json report : " . ($stats['json_report'] ?? '') . " \n";
+        if (!empty($stats['jsonl_report'])) {
+            echo "jsonl report: " . $stats['jsonl_report'] . " \n";
+        }
+        $this->exitIfJsonlIncomplete($stats);
+    }
+    /**
+     * JSONL 模式下用退出码区分故障（规格 §9）：写文件失败 = 1，一个 dump 都没合并 = 2；
+     * 没要求 JSONL 时不改变原有退出码。
+     *
+     * @param array<string, mixed> $stats
+     */
+    protected function exitIfJsonlIncomplete(array $stats): void
+    {
+        if (!$this->isJsonlRequested()) {
+            return;
+        }
+        if (empty($stats['jsonl_report']) && empty($stats['jsonl_text'])) {
+            fwrite(STDERR, "duckcoverage: jsonl report was not produced\n"); // @codeCoverageIgnore
+            exit(1); // @codeCoverageIgnore
+        }
+        if ((int)($stats['dumps_merged'] ?? 0) === 0) {
+            fwrite(STDERR, "duckcoverage: no coverage dump merged, jsonl only has meta and total\n"); // @codeCoverageIgnore
+            exit(2); // @codeCoverageIgnore
+        }
     }
     ////]]]]
     ////[[[[
@@ -430,7 +523,48 @@ EOT;
     protected function createReport($groups, $path_src, $path_dump, $path_report)
     {
         // 传工程根：JSON 报告里的路径写成相对工程根，方便跨机器、跨次 diff
-        return $this->getRunner()->createReport($groups, $path_src, $path_dump, $path_report, (string)App::_()->getProjectPath());
+        return $this->getRunner()->createReport(
+            $groups,
+            $path_src,
+            $path_dump,
+            $path_report,
+            (string)App::_()->getProjectPath(),
+            $this->getJsonlContext($path_report)
+        );
+    }
+    /**
+     * JSONL 报告的上下文；没要求输出时返回空数组，此时行为与以前完全一致
+     *
+     * @return array<string, mixed>
+     */
+    protected function getJsonlContext(string $path_report): array
+    {
+        if (!$this->isJsonlRequested()) {
+            return [];
+        }
+        $jsonl_path = $this->options['duckcoverage_jsonl'];
+        $path = '';
+        if ($jsonl_path !== null) {
+            $path = ($jsonl_path === '')
+                ? rtrim($path_report, '/\\') . DIRECTORY_SEPARATOR . 'report.jsonl'
+                : $this->resolvePath((string)$jsonl_path);
+        }
+        return [
+            'path' => $path,
+            'stdout' => $this->isJsonlStdout(),
+            'detail' => (string)$this->options['duckcoverage_jsonl_detail'],
+            'timestamp' => !$this->options['duckcoverage_jsonl_no_timestamp'],
+        ];
+    }
+    /**
+     * 相对路径按工程根解析（规格 §9）
+     */
+    protected function resolvePath(string $path): string
+    {
+        if (preg_match('#^([a-zA-Z]:[\\\\/]|[\\\\/])#', $path)) {
+            return $path;
+        }
+        return rtrim((string)App::_()->getProjectPath(), '/\\') . DIRECTORY_SEPARATOR . $path;
     }
     ////]]]]
 }

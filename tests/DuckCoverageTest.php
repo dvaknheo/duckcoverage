@@ -148,6 +148,46 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
 
 
         ///////////////
+        // JSONL：不要求输出时上下文为空(行为与以前一致)，绝对路径不被改写
+        DuckCoverageEx::_()->testParseJsonlOptions([]);
+        $this->assertFalse(DuckCoverageEx::_()->testIsJsonlRequested());
+        $this->assertSame([], DuckCoverageEx::_()->testGetJsonlContext('/tmp/r.report'));
+        $this->assertSame('/abs/x.jsonl', DuckCoverageEx::_()->testResolvePath('/abs/x.jsonl'));
+        // 裸 --jsonl 写在报告目录；--jsonl-detail 给了非字符串/空字符串时不改 detail
+        DuckCoverageEx::_()->testParseJsonlOptions(['jsonl' => true, 'jsonl-detail' => true]);
+        $this->assertStringEndsWith(DIRECTORY_SEPARATOR.'report.jsonl', DuckCoverageEx::_()->testGetJsonlContext('/tmp/r.report')['path']);
+        DuckCoverageEx::_()->testParseJsonlOptions(['jsonl-detail' => '']);
+
+        // CLI 端到端：--jsonl=FILE + detail=full + no-timestamp
+        // 先造一份 dump：JSONL 在"一个 dump 都没合并"时会用退出码 2（那是给命令行/CI 的信号，
+        // 在 PHPUnit 隔离进程里会被当成错误），所以这里给一个有数据的组
+        DuckCoverageEx::_()->watchingBegin('jsonl_group');
+        DuckCoverageEx::_()->doBegin();
+        DuckCoverageEx::_()->doEnd();
+        $jsonl_file = $path.'cli_report.jsonl';
+        $this->cmd("cover --report jsonl_group --jsonl={$jsonl_file} --jsonl-detail=full --jsonl-no-timestamp");
+        $this->assertFileExists($jsonl_file);
+        $jsonl_text = (string)file_get_contents($jsonl_file);
+        $this->assertStringStartsWith('{"t":"meta"', $jsonl_text);
+        $this->assertStringContainsString('"t":"total"', $jsonl_text);
+        $this->assertStringContainsString('"t":"file_lines"', $jsonl_text);
+        $this->assertStringNotContainsString('"created"', $jsonl_text);
+
+        // 相对路径按工程根解析（规格 §9）
+        $rel_file = 'cli_report_rel.jsonl';
+        $this->cmd("cover --report jsonl_group --jsonl={$rel_file}");
+        $this->assertFileExists($path.$rel_file);
+        $this->assertStringStartsWith('{"t":"meta"', (string)file_get_contents($path.$rel_file));
+
+        // --format=jsonl：stdout 只有 JSONL，人读信息让路
+        ob_start();
+        $this->cmd("cover --report jsonl_group --format=jsonl");
+        $stdout = (string)ob_get_clean();
+        $this->assertTrue(DuckCoverageEx::_()->testIsJsonlStdout());
+        $this->assertStringContainsString('"t":"meta"', $stdout);
+        $this->assertStringContainsString('"t":"total"', $stdout);
+        $this->assertStringNotContainsString('output path', $stdout);
+
         $_SERVER = $__SERVER;
         LibCoverage::_($old);
         LibCoverage::_()->cleanDirectory($path);
@@ -300,6 +340,32 @@ class DuckCoverageEx extends DuckCoverage
         $pid = \DuckPhp\HttpServer\HttpServer::_()->getPid();
         $this->stopServer();
         return $pid;
+    }
+    /**
+     * @param array<string, mixed> $p
+     */
+    public function testParseJsonlOptions(array $p): void
+    {
+        $this->parseJsonlOptions($p);
+    }
+    /**
+     * @return array<string, mixed>
+     */
+    public function testGetJsonlContext(string $path_report): array
+    {
+        return $this->getJsonlContext($path_report);
+    }
+    public function testResolvePath(string $path): string
+    {
+        return $this->resolvePath($path);
+    }
+    public function testIsJsonlStdout(): bool
+    {
+        return $this->isJsonlStdout();
+    }
+    public function testIsJsonlRequested(): bool
+    {
+        return $this->isJsonlRequested();
     }
     public function testServerHostForRequest(string $host)
     {

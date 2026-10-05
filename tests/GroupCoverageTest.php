@@ -39,6 +39,34 @@ class GroupCoverageTest extends \PHPUnit\Framework\TestCase
         //createReport(array $groups, string $path_src, string $path_dump, string $path_report);
         GroupCoverageEx::_()->testCreateReport();
 
+        // JSONL 分支：写文件 + stdout 文本 + 组不存在时的 error 记录
+        $jsonl_path = $path.'jsonl/report.jsonl';
+        $stats = GroupCoverageEx::_()->createReport(['group1'], $path.'src/', $path.'path_dump/', $path.'path_report/', '', [
+            'path' => $jsonl_path,
+            'stdout' => true,
+            'detail' => 'full',
+            'timestamp' => false,
+        ]);
+        $this->assertSame($jsonl_path, $stats['jsonl_report']);
+        $this->assertFileExists($jsonl_path);
+        $this->assertGreaterThan(0, $stats['dumps_merged']);
+        $text = (string)$stats['jsonl_text'];
+        $this->assertStringNotContainsString("\r", $text);
+        $lines = explode("\n", rtrim($text, "\n"));
+        $this->assertStringStartsWith('{"t":"meta"', $lines[0]);
+        $this->assertStringStartsWith('{"t":"total"', (string)end($lines));
+        $this->assertStringContainsString('"t":"file_lines"', $text);
+
+        // 组不存在：dumps_merged 为 0，且 report.jsonl 里有 error 记录
+        $stats2 = GroupCoverageEx::_()->createReport(['no_such_group'], $path.'src/', $path.'path_dump/', $path.'path_report/', '', [
+            'path' => $path.'jsonl2/report.jsonl',
+            'detail' => 'none',
+        ]);
+        $this->assertSame(0, $stats2['dumps_merged']);
+        $empty_text = (string)file_get_contents($path.'jsonl2/report.jsonl');
+        $this->assertStringContainsString('"t":"error"', $empty_text);
+        $this->assertStringNotContainsString('"unc"', $empty_text);
+
        
 
         

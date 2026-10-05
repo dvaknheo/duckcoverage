@@ -273,6 +273,7 @@ Every report directory gets a `report.json` next to `index.html`, so scripts can
       "classes": { "total": 1, "covered": 1, "percent": 100.0 },
       "traits": { "total": 0, "covered": 0, "percent": 0.0 },
       "uncovered_lines": [43, 44, 45, 48, 51],
+      "sig": [20],
       "function_items": [
         { "name": "delete", "class": "AdminController", "start": 42, "end": 51, "executable": 6, "executed": 0, "covered": false }
       ],
@@ -288,8 +289,64 @@ Every report directory gets a `report.json` next to `index.html`, so scripts can
 - `lines` / `functions` / `classes` / `traits` always carry `executable`/`total` plus the covered count and a `percent`.
 - `functions` counts named functions and methods (including trait methods); `covered` means every executable line of that unit was executed. `function_items` gives the same per unit, with `start`/`end` lines and `class`.
 - `loaded` tells whether the driver reported the file at all while collecting — `false` means the file was never even loaded, which is different from "loaded but 0%".
+- `sig` lists signature lines: executable lines inside a function/method declaration header that the driver never marks as executed, and only for declarations whose body is otherwise fully executed. These are the lines behind "the driver says 29/29 but the report says 29/30".
 - `ignored_files` lists files with no executable lines (whole-file `@codeCoverageIgnore`, or empty files).
 - The same field semantics are echoed inside the JSON itself under `definitions`.
+
+## Line-oriented report (`report.jsonl`)
+
+`report.json` is one big object: easy to read whole, awkward to stream, concatenate or diff. `report.jsonl` is the same data as **one JSON object per line**, so `grep` / `jq` / `diff` work directly and a half-written file is still parseable line by line.
+
+```bash
+# write it (relative paths resolve against the project root; directories are created on demand)
+php cli.php cover --report g1 g2 --jsonl=runtime/DuckCoverage/report.jsonl
+
+# bare --jsonl writes <report dir>/report.jsonl
+php cli.php cover --report g1 g2 --jsonl
+
+# line-level detail, or none at all
+php cli.php cover --report g1 --jsonl=report.jsonl --jsonl-detail=full
+php cli.php cover --report g1 --jsonl=report.jsonl --jsonl-detail=none
+
+# to stdout (pipes)
+php cli.php cover --report g1 g2 --format=jsonl > report.jsonl
+
+# byte-identical output for two runs of the same dumps, so you can diff them
+php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
+```
+
+### Records
+
+| `t` | where | purpose |
+|---|---|---|
+| `meta` | first line, exactly once | `schema`, `generator`, `php`, `driver`, `root`, `groups`, `dumps`, `detail`, `created` |
+| `group` | after `meta`, one per group | `name`, `dumps` |
+| `dir` | before the file records | `path`, `files`, `lines{executable,executed}` |
+| `file` | per file | `path`, `dir`, `app`, `sha1`, `loaded`, `ignored`, `lines`, `funcs`, `unc`, `sig` |
+| `file_func` | right after its `file` | `path`, `name` (`Class::method`), `start`, `end`, `lines` |
+| `file_lines` | after its `file`, `detail=full` only | `path`, `chunk`, `chunks`, `map` |
+| `ignored` | any position | `path`, `reason` |
+| `error` | any position | `group`, `msg`, `fatal` — e.g. a group with no dumps |
+| `total` | last line, exactly once | `files`, `lines`, `funcs`, `records`, `complete` |
+
+### Rules the format guarantees
+
+- One JSON object per line, `LF` only, UTF-8 without BOM, no bare newlines; every line passes `jq -c .` on its own.
+- Every line has a string `t`. **Unknown `t` values must be ignored by consumers**, so new record types stay backward compatible.
+- No percentages anywhere — only counts (`executable` / `executed`), so nobody re-derives two different percentages.
+- Paths are always complete paths relative to `root`; never a bare basename.
+- Field order is stable and records are sorted by `path`, so the same dumps plus `--jsonl-no-timestamp` produce byte-identical output.
+- `total` is the completeness sentinel: a truncated file simply has no `total` line. `records` holds the number of records actually written per type (`meta` and `total` count themselves as well, so its entries add up to `wc -l`), so `grep -c '"t":"file"'` can be checked against `records.file`.
+- Empty coverage still writes `meta` and `total` (`files:0`) — never an empty file.
+- Exit codes are only touched when JSONL was requested: `1` = the file could not be written (the reason is printed to stderr), `2` = no dump was merged at all. Plain `--report` keeps its old behaviour.
+- `detail`: `uncovered` (default) adds `unc` — the sorted list of lines that are executable but not executed, i.e. exactly the lines worth adding tests for. `full` adds `file_lines` with the whole `map` (`1` executed, `-1` executable but not executed, `-2` dead code; `n` is always `1` because this tool records whether a line ran, not how often). `none` adds neither. `unc` always equals the set of `-1` lines of `map`.
+
+### Things worth knowing
+
+- All groups are merged before reporting, so every `file` record is the **union** of the groups: `executed` is a union, never a sum (the denominator is the same source file in every group). There is no per-group `file` block yet.
+- `loaded:false` (never included at all — suspected dead code) is different from `executed:0` (loaded but never reached — needs tests).
+- `sig` lists **signature lines**: lines inside a function or method declaration header that the analyser counts as executable but the driver never marks as executed, in declarations whose body is otherwise fully executed. These are the lines behind "the driver says 29/29 but the report says 29/30", and they are not worth chasing; a method that was never called is *not* listed here, because its body is not fully executed.
+- `--jsonl-per-group` and `--jsonl-compress` are not implemented yet.
 
 ## Test Directive Reference
 
@@ -400,13 +457,14 @@ public $options = [
 
 ## Internals
 
-Three classes make up the package:
+These classes make up the package:
 
 | Class | Role |
 |---|---|
 | `DuckCoverage\DuckCoverage` | The DuckPHP extension: lifecycle hooks, CLI command, directive interpreter, built-in HTTP server and curl client (the latter two are traits). |
 | `DuckCoverage\GroupCoverage` | Collecting, merging and reporting: `doBegin()` / `doEnd()` / `createReport()`, dump naming, merging, and the partial-coverage fix-up. |
-| `DuckCoverage\CoverageJsonReport` | Formats the machine-readable `report.json` that sits next to the HTML report: paths, counts, uncovered lines, units. Reads coverage data only. |
+| `DuckCoverage\CoverageJsonReport` | Formats the machine-readable `report.json` that sits next to the HTML report: paths, counts, uncovered lines, units, signature lines. Reads coverage data only. |
+| `DuckCoverage\CoverageJsonlReport` | Turns the `report.json` array into the line-oriented `report.jsonl`: one record per line, `meta` first and `total` last. Pure transformation, touches no coverage data. |
 | `DuckCoverage\TestListerHelper` | Builds and expands test lists: macros, plus generated route / command / component lists. |
 
 `GroupCoverage` and `CoverageJsonReport` are the two classes that talk to `phpunit/php-code-coverage`; when its API changes, check both. `GroupCoverage` pauses `LibCoverage` while it collects (`doPause()` / `doResume()`), so the two tools can coexist in one process.
