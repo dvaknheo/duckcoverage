@@ -237,6 +237,20 @@ php cli.php cover
 
 如果 `duckcoverage_enable` 是关的，`cover` 不会执行，而是打印提示（`turn on setting to work: 'duckcoverage_enable'`）。
 
+### 给应用传一个标记（`--flag` / `getFlag()`）
+
+`--flag=<值>` 给这次采集挂一个字符串，并且一路带进应用：
+
+```bash
+php cli.php cover --go group1 --flag=admin
+```
+
+- `DuckCoverage::_()->getFlag()` 读它。在 `duckcoverage_test_lister` 回调（`GetTestList()`）里就能按 flag 返回不同清单——flag 是 `admin` 时返回管理员那套，否则返回普通用户那套。
+- web 模式下，客户端回放的每个请求都会带上 `X-DuckCoverage-Flag: <值>` 头，因此被测应用在 HTTP 请求里调用 `getFlag()` 拿到的是同一个值。请求上下文里以头为准；命令行进程里没有这个头，就用配置/命令行给的值。
+- 响应里也会回显 `x-duckcoverage-flag`（诊断用，与 `x-duckcoverage-group` 并列）。
+- 也可以只写在配置里（`'duckcoverage_flag' => 'admin'`），命令行给的值优先。
+- 裸 `--flag`（不带值）不改变任何配置；没有设置 flag 时完全不发这个头。值在放进 header 前会去掉 CR/LF。
+
 ## 输出路径
 
 下表中的路径都相对于 `<runtime>`（DuckPHP 的 `path_runtime`，默认 `runtime/`）以及 `duckcoverage_path`（默认 `<runtime>/DuckCoverage/`）。
@@ -433,6 +447,7 @@ public $options = [
 | `duckcoverage_enable` | — | 主开关。它由 `App::Setting()` 读取，所以配置在应用设置文件（`config/DuckPhpSettings.config.php`）或 `.env` 里；它不是本包的应用选项 |
 | `duckcoverage_stop_init` | `false` | 预留。置 `true` 时 `init()` 立即返回、跳过全部配置——扩展完全不初始化。与上面的开关无关 |
 | `duckcoverage_test_lister` | `null` | 返回回放清单的可调用对象；其 `GetTestList()` 文本会被 `explainMarco()` 展开 |
+| `duckcoverage_flag` | `''` | 带进应用的标记：用 `getFlag()` 读取；web 模式下随请求放进 `X-DuckCoverage-Flag` 头。可被 `--flag=<值>` 覆盖 |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | 把额外选项文件移到新位置，隔离配置环境。监听某个组期间会变成 `DuckCoverage/<组名>.DuckPhpData.config.json` |
 | `duckcoverage_reg_console_command` | `true` | 注册命令行，使 `cover` 指令生效。注册发生在开关判断之前，所以关掉开关时 `cover` 仍能提示功能未开启 |
 | `duckcoverage_path` | `<runtime>/DuckCoverage/` | 基础路径（监听标记 / dump / 报告）。init 时始终由运行时路径推导 |

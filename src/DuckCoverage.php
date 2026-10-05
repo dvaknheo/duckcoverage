@@ -29,6 +29,8 @@ class DuckCoverage extends ComponentBase
         'duckcoverage_data_file_json_file' => 'DuckPhpData-duckcoverage.config.json',
         'duckcoverage_reg_console_command' => true,
         'duckcoverage_test_lister' => null,
+        // --flag=xxx：随采集请求一路带下去的标记；web 模式下放进 X-DuckCoverage-Flag 请求头
+        'duckcoverage_flag' => '',
 
         'duckcoverage_path' => '',
         'duckcoverage_path_src' => 'src/', // 需要
@@ -113,6 +115,8 @@ class DuckCoverage extends ComponentBase
 
         $this->moveDateJsonFile();
         SystemWrapper::header("x-duckcoverage-datafile: {$this->options['duckcoverage_data_file_json_file']}");
+        // 诊断用：把本次的 flag 回显在响应头里（与 x-duckcoverage-group 同类）
+        SystemWrapper::header("x-duckcoverage-flag: {$this->getFlag()}");
         if ($this->is_cli()) {
             echo "\033[41;30m";
             echo "DuckCoverage running: JSON_FILE: {$this->options['duckcoverage_data_file_json_file']}";
@@ -315,6 +319,7 @@ class DuckCoverage extends ComponentBase
 
         $p = Console::_()->getCliParameters();
         $this->parseJsonlOptions($p);
+        $this->parseFlagOption($p);
 
         if (($p['help'] ?? false) || (count($p) === 1)) {
             $str = <<<EOT
@@ -324,6 +329,7 @@ class DuckCoverage extends ComponentBase
 --report a
 --report a b c
 --go {group}
+--flag={value}
 --jsonl[=FILE] [--jsonl-detail=uncovered|full|none] [--jsonl-no-timestamp]
 --format=jsonl
 EOT;
@@ -409,6 +415,22 @@ EOT;
         if (($p['format'] ?? '') === 'jsonl') {
             $this->options['duckcoverage_format'] = 'jsonl';
             $this->options['duckcoverage_jsonl_enable'] = true;
+        }
+    }
+    /**
+     * --flag=xxx / --flag xxx：给这次采集带一个标记
+     *
+     * 应用侧（包括自己的业务代码与测试清单回调）统一用 getFlag() 读它；
+     * web 模式下它会随每个采集请求放进 X-DuckCoverage-Flag 头。
+     * 裸 --flag（没有值）不改变已有配置。
+     *
+     * @param array<string, mixed> $p
+     */
+    protected function parseFlagOption(array $p): void
+    {
+        $flag = $p['flag'] ?? null;
+        if (is_string($flag)) {
+            $this->options['duckcoverage_flag'] = $flag;
         }
     }
     /**
@@ -511,6 +533,24 @@ EOT;
         }
         $group = @file_get_contents($this->options['duckcoverage_path'] . 'DuckCoverage.watching.txt');
         return $group;
+    }
+    /**
+     * 本次运行的 flag（命令行 --flag=xxx，或 options['duckcoverage_flag']）。
+     *
+     * web 模式下优先取这次请求带来的 X-DuckCoverage-Flag 头，因此应用在 HTTP 请求里
+     * 调用 getFlag() 拿到的是"客户端（--play）发过来的那个 flag"；
+     * 在命令行进程里没有该头，就回落到配置/命令行给的值。
+     *
+     * 典型用法：在 GetTestList 回调里按 flag 返回不同的清单，
+     * 让同一份代码分别跑「管理员」「普通用户」等不同前提的采集。
+     */
+    public function getFlag(): string
+    {
+        $flag = SuperGlobal::_()->_SERVER('HTTP_X_DUCKCOVERAGE_FLAG', null);
+        if (is_string($flag)) {
+            return $flag;
+        }
+        return (string)$this->options['duckcoverage_flag'];
     }
     ////]]]]
     ////[[[[
@@ -917,6 +957,12 @@ trait DuckCoverage_HttpClientTrait
     protected function prepareCurl($ch)
     {
         $this->headers[] = 'X-DuckCoverage-Name: ' . $this->current_name;
+        // --flag：随请求带给被测应用，应用侧用 getFlag() 读同一个值。
+        // 去掉 CR/LF：header 值里不允许换行，避免头注入。
+        $flag = str_replace(["\r", "\n"], '', $this->getFlag());
+        if ($flag !== '') {
+            $this->headers[] = 'X-DuckCoverage-Flag: ' . $flag;
+        }
         if ($this->pre_webcall) {
             $this->headers[] = 'X-DuckCoverage-BeforeRun: ' . $this->pre_webcall;
             $this->pre_webcall = null;

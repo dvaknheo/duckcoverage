@@ -234,6 +234,20 @@ php cli.php cover
 
 If `duckcoverage_enable` is off, `cover` prints a hint instead of running (`turn on setting to work: 'duckcoverage_enable'`).
 
+### Passing a flag to the application (`--flag` / `getFlag()`)
+
+`--flag=<value>` attaches one string to a collection run and carries it all the way into the application:
+
+```bash
+php cli.php cover --go group1 --flag=admin
+```
+
+- `DuckCoverage::_()->getFlag()` returns the value. Inside the `duckcoverage_test_lister` callback (`GetTestList()`) that is how you play a different list per precondition — return the admin list when the flag is `admin`, the plain-user list otherwise.
+- In web mode every request the client plays carries it as `X-DuckCoverage-Flag: <value>`, so the application being tested can call `getFlag()` inside an HTTP request and read the same value. Inside a request the header wins; in the CLI process there is no such header, so the configured value is used.
+- Responses echo it back as `x-duckcoverage-flag` (diagnostics, alongside `x-duckcoverage-group`).
+- It can also come from the options (`'duckcoverage_flag' => 'admin'`); the command-line value wins.
+- A bare `--flag` (no value) changes nothing, and when no flag is set the header is not sent at all. CR/LF are stripped before the value goes into a header.
+
 ## Output Paths
 
 All paths below are relative to `<runtime>` (DuckPHP's `path_runtime`, `runtime/` by default) and to `duckcoverage_path`, which defaults to `<runtime>/DuckCoverage/`.
@@ -430,6 +444,7 @@ public $options = [
 | `duckcoverage_enable` | — | Main switch. It is read through `App::Setting()`, so set it in the application setting file (`config/DuckPhpSettings.config.php`) or in `.env`; it is not an application option of this package. |
 | `duckcoverage_stop_init` | `false` | Reserved for the future. When `true`, `init()` returns immediately and skips all configuration — the extension is not set up at all. Unrelated to the switch above. |
 | `duckcoverage_test_lister` | `null` | Callable returning the play list; its `GetTestList()` text is expanded through `explainMarco()`. |
+| `duckcoverage_flag` | `''` | A string carried into the application: read it with `getFlag()`; in web mode it travels as the `X-DuckCoverage-Flag` request header. Overridden by `--flag=<value>`. |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | Moves the additional options file to a new location to isolate the configuration environment. While a group is watched it becomes `DuckCoverage/<group>.DuckPhpData.config.json`. |
 | `duckcoverage_reg_console_command` | `true` | Register the CLI command so that `cover` is available. Registration happens before the enable check, so `cover` can report that the feature is switched off. |
 | `duckcoverage_path` | `<runtime>/DuckCoverage/` | Base path for watch markers, dumps and reports. Always derived from the runtime path at init time. |

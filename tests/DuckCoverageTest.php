@@ -68,6 +68,29 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $this->cmd("cover --watch watching_get_name_group");
         $this->assertSame('watching_get_name_group', DuckCoverageEx::_()->watchingGetName());
         $this->cmd("cover --stop");
+
+        // --flag：命令行解析 -> getFlag() -> 请求头
+        $this->cmd("cover --flag=cli_flag --help");
+        $this->assertSame('cli_flag', DuckCoverage::_()->getFlag());
+        $this->assertContains('X-DuckCoverage-Flag: cli_flag', DuckCoverageEx::_()->testPrepareCurlHeaders());
+        // web 模式：优先用这次请求带来的头
+        $_SERVER['HTTP_X_DUCKCOVERAGE_FLAG'] = 'header_flag';
+        $this->assertSame('header_flag', DuckCoverage::_()->getFlag());
+        unset($_SERVER['HTTP_X_DUCKCOVERAGE_FLAG']);
+        // 头值里的 CR/LF 会被去掉（防头注入）
+        DuckCoverage::_()->options['duckcoverage_flag'] = "bad\r\nvalue";
+        $this->assertContains('X-DuckCoverage-Flag: badvalue', DuckCoverageEx::_()->testPrepareCurlHeaders());
+        DuckCoverage::_()->options['duckcoverage_flag'] = '';
+        // 没有 flag 时不发这个头
+        $headers = DuckCoverageEx::_()->testPrepareCurlHeaders();
+        foreach ($headers as $header) {
+            $this->assertStringNotContainsString('X-DuckCoverage-Flag', $header);
+        }
+        // 裸 --flag（没有值）不改变已有配置
+        DuckCoverage::_()->options['duckcoverage_flag'] = 'keep_me';
+        $this->cmd("cover --flag --help");
+        $this->assertSame('keep_me', DuckCoverage::_()->getFlag());
+        DuckCoverage::_()->options['duckcoverage_flag'] = '';
         DuckCoverage::_()->options['duckcoverage_report_direct'] = true;
 
         DuckCoverageApp::_()->testMore();
@@ -373,6 +396,21 @@ class DuckCoverageEx extends DuckCoverage
     public function testIsJsonlRequested(): bool
     {
         return $this->isJsonlRequested();
+    }
+    /**
+     * 立刻走一遍 prepareCurl()，把要发出去的请求头拿出来看
+     *
+     * @return array<int, string>
+     */
+    public function testPrepareCurlHeaders(): array
+    {
+        $old_name = $this->current_name;
+        $this->headers = [];
+        $this->current_name = 'probe_name';
+        $this->prepareCurl(null);
+        $headers = $this->headers;
+        $this->current_name = $old_name;
+        return $headers;
     }
     public function testServerHostForRequest(string $host)
     {
