@@ -365,6 +365,15 @@ EOT;
             // 报告目录由该选项与组数决定（单组 -> <group>.report，多组/直写 -> report_default_dir）。
             $this->watchingBegin($watch_name);
             $this->echoHuman("watching {$watch_name}\n");
+            // 已知限制（不在这里解决，只提示 + 文档）：--go 在一个进程里走完 watch+play+report+stop，
+            // 启动时加载的配置文件（ExtOptionsLoader 等，以及 DuckPHP 数据文件）无法在阶段之间切换。
+            // TODO_go模式下无法切换配置文件的问题
+            $this->echoHuman(
+                "[--go] Note: --go runs watch + play + report + stop in one process, so everything loaded\n" .
+                "       at startup (ExtOptionsLoader config files, the DuckPHP data file, ...) is loaded once\n" .
+                "       and cannot be switched between the phases. To change a config file before the play\n" .
+                "       phase, use --watch ... , switch the file, then run --play and --report instead of --go.\n"
+            );
             $this->play();
             $this->echoHuman("reporting...\n");
             $this->doReport([$watch_name]);
@@ -488,7 +497,14 @@ EOT;
         @unlink($this->options['duckcoverage_path'] . 'DuckCoverage.watching.txt');
         @unlink($this->options['duckcoverage_path'] . basename((string)$name) . '.watch.lock');
     }
-    protected function watchingGetName()
+    /**
+     * 当前正在监听的组名：优先取进程内的状态，其次读 DuckCoverage.watching.txt（即"最后 watch 的组"）。
+     *
+     * 公开方法：外部（如测试清单回调、诊断代码）也常需要知道当前组名。
+     *
+     * @return string|false 组名；没有在监听、或读取失败时为 false
+     */
+    public function watchingGetName()
     {
         if ($this->current_group) {
             return $this->current_group;

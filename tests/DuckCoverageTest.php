@@ -61,6 +61,13 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $go_output = (string)ob_get_clean();
         $this->assertStringContainsString('go_path_group.report', $go_output);
         $this->assertStringNotContainsString('AAAAA.report', $go_output);
+        // --go 会提示"进程内换不了配置文件"这一已知限制（英文提示）
+        $this->assertStringContainsString('cannot be switched between the phases', $go_output);
+
+        // watchingGetName() 是公开方法：测试类不是 DuckCoverage 的子类，能调用就说明可见性正确
+        $this->cmd("cover --watch watching_get_name_group");
+        $this->assertSame('watching_get_name_group', DuckCoverageEx::_()->watchingGetName());
+        $this->cmd("cover --stop");
         DuckCoverage::_()->options['duckcoverage_report_direct'] = true;
 
         DuckCoverageApp::_()->testMore();

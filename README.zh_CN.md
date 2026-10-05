@@ -148,6 +148,10 @@ watch → play → report → stop
 
 `--go` 是下面四个步骤的**真正组合**：它不改动任何选项，因此生成的报告目录与手工依次执行 `--watch`、`--play`、`--report`、`--stop` 完全一致。只有在你设置了 `duckcoverage_report_direct => true`（或用 `--report` 一次报告多个组）时，报告才会改写到 `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/`——见「输出路径」。
 
+**已知限制：`--go` 模式中途换不了配置文件。** 四个阶段跑在同一个进程里，启动时加载的东西整轮都不会变——经 `ExtOptionsLoader` 读进来的文件、按组的 DuckPHP 数据文件（`duckcoverage_data_file_json_file`），以及已经被 opcache 缓存的内容。所以如果回放阶段需要**另一份**配置文件（例如换一个管理员/用户提供者），`--go` 做不到：第一个请求回放时这些选项就已经定死了。每次执行 `--go` 都会打印一行英文提示说明这件事。
+
+分步执行没有这个限制，因为每一步都是独立进程：先 `--watch`，再改配置文件，然后 `--play` 与 `--report`。想按"一份配置文件一个组"采集就走这条路：
+
 ### 分步执行
 
 需要观察中间状态或手动扩展时，可拆成几步：
@@ -494,6 +498,7 @@ public function command_cover()
 public function doCommand()
 public function genTestListOfAll()
 public function callHandler($handler, $ext_args = [])
+public function watchingGetName()
 ```
 
 - `BeforeRun` / `AfterRun`（即 `_OnBeforeRun` / `_OnAfterRun`）只是钩子回调，仅在 route hook 模式下有行为。
@@ -502,6 +507,7 @@ public function callHandler($handler, $ext_args = [])
 - `InitedThenGoRouteHookMode()` 切到 route hook 模式，必须在应用初始化完成后调用。
 - `genTestListOfAll()` 从路由、控制台命令以及 `Business` / `Model` 组件生成测试清单，输出可以直接粘进你的 `GetTestList()` 作为起点。
 - `command_cover` 注册命令行。
+- `watchingGetName()` 返回当前正在监听的组名：进程内有状态就取它，否则读 `DuckCoverage.watching.txt`（也就是最后一次 `--watch` 的组）；没有在监听时返回 `false`。它是公开方法，方便测试清单回调或诊断代码问"我现在在往哪个组采集"。
 
 `DuckCoverage\GroupCoverage` 对外提供 `_()`、`init()`、`getCoverage()`、`doBegin()`、`doEnd()`、`createReport()`；需要在回调里程序化生成清单时，可以用 `DuckCoverage\TestListerHelper::_()`。
 

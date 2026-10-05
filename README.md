@@ -145,6 +145,10 @@ watch → play → report → stop
 
 `--go` is a true composition of the four steps below: it does not change any option, so it always produces the same report directory as running `--watch`, `--play`, `--report` and `--stop` by hand. With `duckcoverage_report_direct => true` (or when reporting several groups with `--report`) the report goes to `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/` instead — see “Output Paths”.
 
+**Known limitation: you cannot switch config files inside `--go`.** Because all four phases run in a single process, everything loaded at startup stays for the whole run — files read through `ExtOptionsLoader`, the per-group DuckPHP data file (`duckcoverage_data_file_json_file`), and anything opcache already cached. So if the play phase needs a *different* config file (for example another admin/user provider), `--go` cannot do it: those options are already fixed by the time the first request is played. `--go` prints an English note about this every time it runs.
+
+The step-by-step workflow has no such limit, because every step is its own process: run `--watch`, then change the config file, then `--play` and `--report`. That is the way to collect one group per config file:
+
 ### Step-by-step operation
 
 When you need to inspect intermediate states or extend the workflow manually, run the steps separately:
@@ -491,11 +495,13 @@ public function command_cover()
 public function doCommand()
 public function genTestListOfAll()
 public function callHandler($handler, $ext_args = [])
+public function watchingGetName()
 ```
 
 - `BeforeRun` / `AfterRun` (`_OnBeforeRun` / `_OnAfterRun`) are hook callbacks; they only do anything in route hook mode.
 - The important initialization method is `Prepare()`, which should be called from the root application's `onPrepare`.
 - `init()` inserts the extension into the application.
+- `watchingGetName()` returns the group currently being watched: the in-process group if there is one, otherwise the group recorded in `DuckCoverage.watching.txt` (that is, the last `--watch`). It returns `false` when nothing is being watched. It is public so a test-list callback or diagnostics code can ask "which group am I collecting into?".
 - `InitedThenGoRouteHookMode()` switches to route hook mode and must be called after the application has been initialized.
 - `genTestListOfAll()` generates a test list from routes, console commands and `Business` / `Model` components; paste the output into your `GetTestList()` as a starting point.
 - `command_cover` registers the CLI command.
