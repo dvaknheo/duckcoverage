@@ -346,6 +346,7 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 | `file_lines` | after its `file`, `detail=full` only | `path`, `chunk`, `chunks`, `map` |
 | `ignored` | any position | `path`, `reason` |
 | `error` | any position | `group`, `msg`, `fatal` — e.g. a group with no dumps |
+| `warning` | before `total` | `msg` — e.g. `no dumps merged`; the same fact is also carried as `warning` inside `meta` |
 | `total` | last line, exactly once | `files`, `lines`, `funcs`, `records`, `complete` |
 
 ### Rules the format guarantees
@@ -356,8 +357,8 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 - Paths are always complete paths relative to `root`; never a bare basename.
 - Field order is stable and records are sorted by `path`, so the same dumps plus `--jsonl-no-timestamp` produce byte-identical output.
 - `total` is the completeness sentinel: a truncated file simply has no `total` line. `records` holds the number of records actually written per type (`meta` and `total` count themselves as well, so its entries add up to `wc -l`), so `grep -c '"t":"file"'` can be checked against `records.file`.
-- Empty coverage still writes `meta` and `total` (`files:0`) — never an empty file.
-- Exit codes are only touched when JSONL was requested: `1` = the file could not be written (the reason is printed to stderr), `2` = no dump was merged at all. Plain `--report` keeps its old behaviour.
+- Empty coverage still writes `meta` and `total` (`files:0`) — never an empty file. It also says so out loud: such a report is structurally indistinguishable from a real 0%, so the command line prints a prominent warning, `report.json` gets a top-level `warning`, and the JSONL gets `warning` inside `meta` plus a `t=warning` record. `complete` is deliberately left alone: it only means the generator finished normally.
+- Exit codes are untouched by default: an empty report (no dump merged) still exits 0, because creating the directory first and adding dumps later is a legitimate pattern. `1` is still used when a requested `--jsonl` file cannot be written; add `--fail-on-empty` to make an empty report exit `2`.
 - `detail`: `uncovered` (default) adds `unc` — the sorted list of lines that are executable but not executed, i.e. exactly the lines worth adding tests for. `full` adds `file_lines` with the whole `map` (`1` executed, `-1` executable but not executed, `-2` dead code; `n` is always `1` because this tool records whether a line ran, not how often). `none` adds neither. `unc` always equals the set of `-1` lines of `map`.
 
 ### Things worth knowing

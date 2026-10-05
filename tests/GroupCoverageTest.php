@@ -66,6 +66,15 @@ class GroupCoverageTest extends \PHPUnit\Framework\TestCase
         $empty_text = (string)file_get_contents($path.'jsonl2/report.jsonl');
         $this->assertStringContainsString('"t":"error"', $empty_text);
         $this->assertStringNotContainsString('"unc"', $empty_text);
+        // 规格 §3.3-B：一份 dump 都没合并时，机器可读输出里要带上这个事实
+        $this->assertStringContainsString('"t":"warning"', $empty_text);
+        $this->assertStringContainsString('no dumps merged', $empty_text);
+        $json2 = json_decode((string)file_get_contents($path.'path_report/report.json'), true);
+        $this->assertSame(0, $json2['dumps_merged']);
+        $this->assertSame('no dumps merged', $json2['warning']);
+
+        // 正常有数据时：不带 warning（不要复用 complete 表达"数据可疑"）
+        $this->assertStringNotContainsString('"t":"warning"', $text);
 
        
 

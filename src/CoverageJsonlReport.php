@@ -64,7 +64,7 @@ class CoverageJsonlReport
         $group_dumps = (array)($context['group_dumps'] ?? []);
 
         $out = [];
-        $records = ['meta' => 0, 'group' => 0, 'dir' => 0, 'file' => 0, 'file_func' => 0, 'file_lines' => 0, 'ignored' => 0, 'error' => 0, 'total' => 0];
+        $records = ['meta' => 0, 'group' => 0, 'dir' => 0, 'file' => 0, 'file_func' => 0, 'file_lines' => 0, 'ignored' => 0, 'error' => 0, 'warning' => 0, 'total' => 0];
 
         $out[] = $this->encode($this->metaRecord($report, $groups, $detail, $this->withTimestamp($context)));
         $records['meta']++;
@@ -108,6 +108,11 @@ class CoverageJsonlReport
             $records['error']++;
         }
 
+        // 规格 §3.3-B：空报告额外给一条 warning 记录（放在 total 之前，与 error 同类）
+        if ((int)($report['dumps_merged'] ?? 0) === 0) {
+            $out[] = $this->encode(['t' => 'warning', 'msg' => 'no dumps merged']);
+            $records['warning']++;
+        }
         $records['total'] = 1;
         $out[] = $this->encode($this->totalRecord($report, $records, count($files)));
 
@@ -195,6 +200,10 @@ class CoverageJsonlReport
         if ($with_timestamp) {
             // 时间戳只允许出现在这一行(规格 §6.2)；--jsonl-no-timestamp 时整个字段省略
             $record['created'] = (string)($report['generated_at'] ?? '');
+        }
+        // 规格 §3.3-B：一份 dump 都没合并到时给出机器可读的警告；正常情况不带该字段
+        if ((int)($report['dumps_merged'] ?? 0) === 0) {
+            $record['warning'] = 'no dumps merged';
         }
         return $record;
     }
@@ -358,6 +367,7 @@ class CoverageJsonlReport
                 'group' => $records['group'],
                 'ignored' => $records['ignored'],
                 'error' => $records['error'],
+                'warning' => $records['warning'],
                 'meta' => $records['meta'],
                 'total' => $records['total'],
             ],

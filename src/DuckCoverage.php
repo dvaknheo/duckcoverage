@@ -38,6 +38,8 @@ class DuckCoverage extends ComponentBase
         'duckcoverage_report_default_dir' => 'AAAAA.report',
 
         // JSONL 报告：--jsonl[=FILE] 输出一行一个 JSON 对象；--format=jsonl 则写到 stdout
+        // 空报告（一份 dump 都没合并）默认不改退出码；--fail-on-empty 才非零退出
+        'duckcoverage_fail_on_empty' => false,
         'duckcoverage_jsonl_enable' => false,
         'duckcoverage_jsonl' => null,                // null = 不写文件；'' = 报告目录下 report.jsonl；其它 = 该路径(相对工程根)
         'duckcoverage_jsonl_detail' => 'uncovered',  // none | uncovered | full
@@ -320,6 +322,7 @@ class DuckCoverage extends ComponentBase
         $p = Console::_()->getCliParameters();
         $this->parseJsonlOptions($p);
         $this->parseFlagOption($p);
+        $this->parseFailOnEmpty($p);
 
         if (($p['help'] ?? false) || (count($p) === 1)) {
             $str = <<<EOT
@@ -332,6 +335,7 @@ class DuckCoverage extends ComponentBase
 --flag={value}
 --jsonl[=FILE] [--jsonl-detail=uncovered|full|none] [--jsonl-no-timestamp]
 --format=jsonl
+--fail-on-empty
 EOT;
             echo $str;
             return;
@@ -434,6 +438,19 @@ EOT;
         }
     }
     /**
+     * --fail-on-empty：一份 dump 都没合并到时用非零退出码（默认关闭，规格 §3.3-C）
+     *
+     * Console::parseCliArgs() 会把 '-' 归一成 '_'，所以两个键名都接受。
+     *
+     * @param array<string, mixed> $p
+     */
+    protected function parseFailOnEmpty(array $p): void
+    {
+        if ($p['fail_on_empty'] ?? $p['fail-on-empty'] ?? false) {
+            $this->options['duckcoverage_fail_on_empty'] = true;
+        }
+    }
+    /**
      * JSONL 是否写到 stdout
      */
     protected function isJsonlStdout(): bool
@@ -471,6 +488,15 @@ EOT;
         $time_end = microtime(true);
         $time_cost = $time_end - $time_begin;
         $time_cost = sprintf('%0.3f', $time_cost);
+        if ((int)($stats['dumps_merged'] ?? 0) === 0) {
+            // 规格 §3.3-A：醒目告警。空报告的结构完全正常(executed 全为 0)，
+            // 与"真的 0%"在结构上无法区分，所以必须在命令行上说清楚。
+            // 走 echoHuman：--format=jsonl 时 stdout 要保持纯 JSONL，此时靠机器可读的 warning 字段。
+            $this->echoHuman("\033[41;30m");
+            $this->echoHuman("⚠️  no dumps merged: the percentages in this report are meaningless (executed is all 0)\n");
+            $this->echoHuman("    没有合并到任何 dump：本报告的百分比没有意义（executed 全为 0）\n");
+            $this->echoHuman("\033[0m");
+        }
         if ($this->isJsonlStdout()) {
             // stdout 必须是纯 JSONL：人读信息一律让路(只保证 --report 模式)
             echo (string)($stats['jsonl_text'] ?? '');
@@ -492,15 +518,14 @@ EOT;
      */
     protected function exitIfJsonlIncomplete(array $stats): void
     {
-        if (!$this->isJsonlRequested()) {
-            return;
-        }
-        if (empty($stats['jsonl_report']) && empty($stats['jsonl_text'])) {
+        if ($this->isJsonlRequested() && empty($stats['jsonl_report']) && empty($stats['jsonl_text'])) {
             fwrite(STDERR, "duckcoverage: jsonl report was not produced\n"); // @codeCoverageIgnore
             exit(1); // @codeCoverageIgnore
         }
-        if ((int)($stats['dumps_merged'] ?? 0) === 0) {
-            fwrite(STDERR, "duckcoverage: no coverage dump merged, jsonl only has meta and total\n"); // @codeCoverageIgnore
+        // 空报告默认不动退出码（规格 §3.3-C：先建目录、后补 dump 的场景会故意跑空报告）；
+        // 只有显式给了 --fail-on-empty 才非零退出。
+        if ((int)($stats['dumps_merged'] ?? 0) === 0 && $this->options['duckcoverage_fail_on_empty']) {
+            fwrite(STDERR, "duckcoverage: no coverage dump merged (--fail-on-empty)\n"); // @codeCoverageIgnore
             exit(2); // @codeCoverageIgnore
         }
     }

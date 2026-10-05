@@ -288,7 +288,7 @@ PHP);
         $this->assertSame($report['totals']['lines']['executed'], $total['lines']['executed']);
         $this->assertSame($report['totals']['functions']['total'], $total['funcs']['total']);
         $this->assertSame(
-            ['file', 'file_func', 'file_lines', 'dir', 'group', 'ignored', 'error', 'meta', 'total'],
+            ['file', 'file_func', 'file_lines', 'dir', 'group', 'ignored', 'error', 'warning', 'meta', 'total'],
             array_keys($total['records'])
         );
 
@@ -532,13 +532,16 @@ PHP);
         ]);
         $empty_lines = explode("\n", $jsonl_report->render($empty_report, ['timestamp' => false]));
         $this->assertSame('', array_pop($empty_lines));
-        $this->assertCount(2, $empty_lines);
+        $this->assertCount(3, $empty_lines);   // meta + warning + total（空数据必须给 warning，规格 §3.3-B）
         $this->assertSame('meta', json_decode($empty_lines[0], true)['t']);
-        $empty_total = json_decode($empty_lines[1], true);
+        $this->assertSame('no dumps merged', json_decode($empty_lines[0], true)['warning']);
+        $this->assertSame('warning', json_decode($empty_lines[1], true)['t']);
+        $empty_total = json_decode($empty_lines[2], true);
         $this->assertSame('total', $empty_total['t']);
         $this->assertSame(0, $empty_total['files']);
         $this->assertTrue($empty_total['complete']);
-        $this->assertSame(2, array_sum($empty_total['records']));
+        $this->assertSame(3, array_sum($empty_total['records']));
+        $this->assertSame(1, $empty_total['records']['warning']);
         $this->assertSame(0, $empty_total['records']['file']);
 
         // 防御性契约：file 的 line_map 为空时也要输出 {} 而不是 []，unc/sig 空数组也要在

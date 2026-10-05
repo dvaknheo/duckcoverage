@@ -349,6 +349,7 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 | `file_lines` | 紧跟其 `file`，仅 `detail=full` | `path`、`chunk`、`chunks`、`map` |
 | `ignored` | 任意位置 | `path`、`reason` |
 | `error` | 任意位置 | `group`、`msg`、`fatal` —— 例如某个组一个 dump 都没有 |
+| `warning` | `total` 之前 | `msg` —— 例如 `no dumps merged`；同一事实也写在 `meta` 的 `warning` 里 |
 | `total` | 最后一行，有且仅有一行 | `files`、`lines`、`funcs`、`records`、`complete` |
 
 ### 格式保证
@@ -359,8 +360,8 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 - 路径一律是相对 `root` 的完整路径，绝不只给 basename。
 - 字段顺序稳定、记录按 `path` 排序，因此同一份 dump 加 `--jsonl-no-timestamp` 时输出逐字节一致。
 - `total` 是完整性哨兵：被截断的文件就是没有 `total` 行。`records` 是各类记录实际写出的条数（`meta`/`total` 这两行也计在内，所以各项之和就是文件行数），可以拿 `grep -c '"t":"file"'` 与 `records.file` 对账。
-- 没有任何覆盖数据时仍然输出 `meta` 与 `total`（`files:0`），绝不输出空文件。
-- 只有在要求 JSONL 时才动退出码：`1` = 文件写失败（原因打到 stderr），`2` = 一个 dump 都没合并。普通 `--report` 的退出码保持原样。
+- 没有任何覆盖数据时仍然输出 `meta` 与 `total`（`files:0`），绝不输出空文件。而且会明确说出来：这种报告与"真的 0%"在结构上无法区分，所以命令行会打醒目告警、`report.json` 顶层给 `warning`、JSONL 的 `meta` 里给 `warning` 并额外输出一条 `t=warning` 记录。`complete` 故意不动：它只表示"生成器正常收尾"。
+- 退出码默认不动：空报告（一个 dump 都没合并到）仍然退出 0——"先建目录、后补 dump"是正当用法。只有在要求写 `--jsonl` 文件却写失败时才用 `1`；加 `--fail-on-empty` 可以让空报告以 `2` 退出。
 - `detail`：`uncovered`（默认）额外给 `unc` —— 可执行但未执行的行号升序数组，也就是真正值得补测试的那些行；`full` 额外给 `file_lines` 整份 `map`（`1` 已执行、`-1` 可执行未执行、`-2` dead code；`n` 恒为 `1`，因为本工具只记"有没有执行"而不记次数）；`none` 两者都不给。`unc` 永远等于 `map` 里 `-1` 的集合。
 
 ### 需要知道的几件事

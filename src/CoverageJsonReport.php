@@ -197,7 +197,7 @@ class CoverageJsonReport
         usort($files, [$this, 'compareByPath']);
         usort($ignored_files, [$this, 'compareByPath']);
 
-        return [
+        $ret = [
             'schema' => 'duckcoverage-report/1',
             'generated_at' => (new \DateTime())->format(\DateTime::ATOM),
             'generator' => [
@@ -225,6 +225,12 @@ class CoverageJsonReport
             'files' => $files,
             'ignored_files' => $ignored_files,
         ];
+        // 规格 §3.3-B：一份 dump 都没合并到时，顶层给出机器可读的警告（正常时不带该字段）。
+        // 注意不要复用 complete：那是"生成器正常收尾"，空报告确实正常收尾了。
+        if ((int)$context['dumps_merged'] === 0) {
+            $ret['warning'] = 'no dumps merged';
+        }
+        return $ret;
     }
 
     /**
