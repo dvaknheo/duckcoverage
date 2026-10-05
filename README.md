@@ -341,7 +341,7 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 | `meta` | first line, exactly once | `schema`, `generator`, `php`, `driver`, `root`, `groups`, `dumps`, `detail`, `created` |
 | `group` | after `meta`, one per group | `name`, `dumps` |
 | `dir` | before the file records | `path`, `files`, `lines{executable,executed}` |
-| `file` | per file | `path`, `dir`, `app`, `sha1`, `loaded`, `ignored`, `lines`, `funcs`, `unc`, `sig` |
+| `file` | per file | `path`, `dir`, `app`, `sha1`, `loaded`, `ignored`, `lines`, `funcs`, `unc`, `todo`, `sig` |
 | `file_func` | right after its `file` | `path`, `name` (`Class::method`), `start`, `end`, `lines` |
 | `file_lines` | after its `file`, `detail=full` only | `path`, `chunk`, `chunks`, `map` |
 | `ignored` | any position | `path`, `reason` |
@@ -364,7 +364,7 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 
 - All groups are merged before reporting, so every `file` record is the **union** of the groups: `executed` is a union, never a sum (the denominator is the same source file in every group). There is no per-group `file` block yet.
 - `loaded:false` (never included at all — suspected dead code) is different from `executed:0` (loaded but never reached — needs tests).
-- `sig` lists **signature lines**: lines inside a function or method declaration header that the analyser counts as executable but the driver never marks as executed, in declarations whose body is otherwise fully executed. These are the lines behind "the driver says 29/29 but the report says 29/30", and they are not worth chasing; a method that was never called is *not* listed here, because its body is not fully executed.
+- `sig` lists **signature lines**: lines inside a function or method declaration header that the analyser counts as executable but the driver never marks as executed, in declarations whose body is otherwise fully executed. These are the lines behind "the driver says 29/29 but the report says 29/30", and they are not worth chasing; a method that was never called is *not* listed here, because its body is not fully executed. `sig` is a **subset of `unc` / `uncovered_lines`**: the lines actually worth adding tests for are the difference — which is exactly what `todo` (in `report.jsonl`) and `todo_lines` (in `report.json`) contain. When `unc` is nothing but signature lines, `todo` is `[]`.
 - `--jsonl-per-group` and `--jsonl-compress` are not implemented yet.
 
 ## Test Directive Reference

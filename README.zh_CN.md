@@ -344,7 +344,7 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 | `meta` | 第一行，有且仅有一行 | `schema`、`generator`、`php`、`driver`、`root`、`groups`、`dumps`、`detail`、`created` |
 | `group` | `meta` 之后，每组一行 | `name`、`dumps` |
 | `dir` | 文件记录之前 | `path`、`files`、`lines{executable,executed}` |
-| `file` | 每个文件一行 | `path`、`dir`、`app`、`sha1`、`loaded`、`ignored`、`lines`、`funcs`、`unc`、`sig` |
+| `file` | 每个文件一行 | `path`、`dir`、`app`、`sha1`、`loaded`、`ignored`、`lines`、`funcs`、`unc`、`todo`、`sig` |
 | `file_func` | 紧跟其 `file` | `path`、`name`（`Class::method`）、`start`、`end`、`lines` |
 | `file_lines` | 紧跟其 `file`，仅 `detail=full` | `path`、`chunk`、`chunks`、`map` |
 | `ignored` | 任意位置 | `path`、`reason` |
@@ -367,7 +367,7 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 
 - 所有组是先合并再出报告的，所以每条 `file` 记录都是**全组的并集**：`executed` 是并集而不是相加（分母是同一份源码）。目前没有"按组分别输出 file 记录"的模式。
 - `loaded:false`（本次完全没被 include，疑似死代码）与 `executed:0`（加载了但一行没跑到，需要补测试）是两回事。
-- `sig` 是**签名行**：函数/方法声明头部里被静态分析算作可执行、但驱动永远不会标记为执行的行（前提是该声明的函数体其余可执行行都已执行）。也就是"驱动侧 29/29、报表却是 29/30"里那一行，不值得去追；而"整个方法从没被调用过"**不会**出现在这里，因为它的函数体并没有全部执行。
+- `sig` 是**签名行**：函数/方法声明头部里被静态分析算作可执行、但驱动永远不会标记为执行的行（前提是该声明的函数体其余可执行行都已执行）。也就是"驱动侧 29/29、报表却是 29/30"里那一行，不值得去追；而"整个方法从没被调用过"**不会**出现在这里，因为它的函数体并没有全部执行。`sig` 是 `unc` / `uncovered_lines` 的**子集**：真正值得补的行要相减——`report.jsonl` 里的 `todo` 与 `report.json` 里的 `todo_lines` 就是这个差集；当 `unc` 全是签名行时 `todo` 为 `[]`。
 - `--jsonl-per-group` 与 `--jsonl-compress` 还没实现。
 
 ## 测试指令参考

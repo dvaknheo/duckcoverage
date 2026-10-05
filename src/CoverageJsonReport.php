@@ -129,6 +129,7 @@ class CoverageJsonReport
             sort($uncovered);
 
             $dir = $this->dirOf($path);
+            $sig = $this->signatureLines($file, $lines);
             $files[] = [
                 'path' => $path,
                 'dir' => $dir,
@@ -156,8 +157,10 @@ class CoverageJsonReport
                     'percent' => $this->percent($traits['covered'], $traits['total']),
                 ],
                 'uncovered_lines' => $uncovered,
+                // todo_lines = uncovered_lines - sig：真正还能补的行
+                'todo_lines' => array_values(array_diff($uncovered, $sig)),
                 // 签名行：被算成可执行、但驱动永远不会标为已执行的行(见 §5.4 与 signatureLines())
-                'sig' => $this->signatureLines($file, $lines),
+                'sig' => $sig,
                 'function_items' => $functions,
                 'line_map' => $line_map,
             ];

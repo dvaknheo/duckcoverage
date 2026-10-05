@@ -249,6 +249,8 @@ class CoverageJsonlReport
         ];
         if ($detail !== 'none') {
             $record['unc'] = $this->intList($file['uncovered_lines'] ?? []);
+            // todo = unc - sig：真正还能补的行；unc 全是签名行时 todo == []
+            $record['todo'] = $this->intList($file['todo_lines'] ?? []);
         }
         $record['sig'] = $this->intList($file['sig'] ?? []);
         return $record;

@@ -364,9 +364,11 @@ PHP);
             $this->assertArrayNotHasKey('group', $record);
             $this->assertArrayNotHasKey('percent', $record['lines']);
             $this->assertSame(
-                ['t', 'path', 'dir', 'app', 'sha1', 'loaded', 'ignored', 'lines', 'funcs', 'unc', 'sig'],
+                ['t', 'path', 'dir', 'app', 'sha1', 'loaded', 'ignored', 'lines', 'funcs', 'unc', 'todo', 'sig'],
                 array_keys($record)
             );
+            // todo = unc - sig：真正还能补的行（签名行扣掉之后）
+            $this->assertSame(array_values(array_diff($record['unc'], $record['sig'])), $record['todo']);
             $this->assertSame(['executable', 'executed'], array_keys($record['lines']));
             $this->assertSame(['total', 'covered'], array_keys($record['funcs']));
             $this->assertFalse($record['ignored']);
