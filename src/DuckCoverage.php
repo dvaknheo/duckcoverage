@@ -546,6 +546,11 @@ EOT;
      */
     public function getFlag(): string
     {
+        // 安全：总开关关着时 flag 一律不生效——既不认 --flag/配置，也不认请求头。
+        // 这样外部请求无法靠一个 X-DuckCoverage-Flag 头去影响被测应用的行为。
+        if (!App::Setting('duckcoverage_enable', false)) {
+            return ''; // @codeCoverageIgnore
+        }
         $flag = SuperGlobal::_()->_SERVER('HTTP_X_DUCKCOVERAGE_FLAG', null);
         if (is_string($flag)) {
             return $flag;

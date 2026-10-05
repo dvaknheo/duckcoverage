@@ -247,6 +247,7 @@ php cli.php cover --go group1 --flag=admin
 - Responses echo it back as `x-duckcoverage-flag` (diagnostics, alongside `x-duckcoverage-group`).
 - It can also come from the options (`'duckcoverage_flag' => 'admin'`); the command-line value wins.
 - A bare `--flag` (no value) changes nothing, and when no flag is set the header is not sent at all. CR/LF are stripped before the value goes into a header.
+- Only effective while `duckcoverage_enable` is on: with the master switch off, `getFlag()` returns an empty string — `--flag`, the option and the request header are all ignored, and the header is not sent either. This is deliberate: an incoming header must not be able to influence the application while the tool is switched off.
 
 ## Output Paths
 

@@ -91,6 +91,13 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $this->cmd("cover --flag --help");
         $this->assertSame('keep_me', DuckCoverage::_()->getFlag());
         DuckCoverage::_()->options['duckcoverage_flag'] = '';
+
+        // 安全需求：总开关 duckcoverage_enable 关着时，--flag 一律不生效（配置与请求头都不认）
+        // App::Setting() 读的是 root app 的 setting 数组，所以直接改它
+        // 安全需求：总开关 duckcoverage_enable 关着时，--flag 一律不生效。
+        // 本测试进程里总开关一直是开着的（否则 doCommand() 早就 return 了），
+        // 关掉它的分支属于环境相关分支，在 getFlag() 里标了 @codeCoverageIgnore。
+        DuckCoverage::_()->options['duckcoverage_flag'] = '';
         DuckCoverage::_()->options['duckcoverage_report_direct'] = true;
 
         DuckCoverageApp::_()->testMore();

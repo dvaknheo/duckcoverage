@@ -250,6 +250,7 @@ php cli.php cover --go group1 --flag=admin
 - 响应里也会回显 `x-duckcoverage-flag`（诊断用，与 `x-duckcoverage-group` 并列）。
 - 也可以只写在配置里（`'duckcoverage_flag' => 'admin'`），命令行给的值优先。
 - 裸 `--flag`（不带值）不改变任何配置；没有设置 flag 时完全不发这个头。值在放进 header 前会去掉 CR/LF。
+- 只在 `duckcoverage_enable` 打开时生效：总开关关着时 `getFlag()` 恒返回空串——`--flag`、配置项、请求头一概不认，请求头也不会发出去。这是有意为之：工具关着的时候，外部请求不能靠一个头去影响应用的行为。
 
 ## 输出路径
 
