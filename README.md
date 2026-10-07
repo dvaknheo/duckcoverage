@@ -395,6 +395,8 @@ Macro directives are expanded by `TestListerHelper::explainMarco()` in the text 
 | `#BUSINESS <Class@method> [args]` | Rewrite the line into a `CALL` against `<namespace>\Business\<Class>@<method>`. |
 | `#MODEL <Class@method> [args]` | Rewrite the line into a `CALL` against `<namespace>\Model\<Class>@<method>`. |
 | `#ACTION <Class@method> [args]` | Rewrite the line into a `CALL` against `<namespace>\Controller\<Class>@<method>`. |
+| `#ADMIN_LOGIN` / `#ADMIN_LOGOUT` / `#ADMIN_CLEAN` | Embed the admin provider's list for that state. Switches to the admin provider's phase, sets `options['duckcoverage_test_lister_parameter']` to `login` / `logout` / `clean`, expands the callback's list, then switches back. Same as `TestListerHelper::TestListByAdminLogin()` etc. |
+| `#USER_LOGIN` / `#USER_LOGOUT` / `#USER_CLEAN` | Same for the user provider — `TestListerHelper::TestListByUserLogin()` etc. |
 
 `#BUSINESS`, `#MODEL` and `#ACTION` are produced by `genTestListOfAll()`; they are shorthand so that generated lists stay readable. Every rewritten `CALL` is prefixed with the current phase.
 
@@ -514,12 +516,15 @@ public function doCommand()
 public function genTestListOfAll()
 public function callHandler($handler, $ext_args = [])
 public function watchingGetName()
+public function logException(\Throwable $ex)
+public function explainMarco($test_list)
 ```
 
 - `BeforeRun` / `AfterRun` (`_OnBeforeRun` / `_OnAfterRun`) are hook callbacks; they only do anything in route hook mode.
 - The important initialization method is `Prepare()`, which should be called from the root application's `onPrepare`.
 - `init()` inserts the extension into the application.
 - `watchingGetName()` returns the group currently being watched: the in-process group if there is one, otherwise the group recorded in `DuckCoverage.watching.txt` (that is, the last `--watch`). It returns `false` when nothing is being watched. It is public so a test-list callback or diagnostics code can ask "which group am I collecting into?".
+- `explainMarco($test_list)` expands the macro directives of a test list (`#PHASE_BEGIN`, `#BUSINESS`, `#ADMIN_LOGIN`, …) and returns the result; the `GetTestList()` callback can call it when it wants to expand a fragment itself. It is the same expansion the extension applies to your callback's text.
 - `InitedThenGoRouteHookMode()` switches to route hook mode and must be called after the application has been initialized.
 - `genTestListOfAll()` generates a test list from routes, console commands and `Business` / `Model` components; paste the output into your `GetTestList()` as a starting point.
 - `command_cover` registers the CLI command.

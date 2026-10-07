@@ -97,6 +97,10 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         // 关掉它的分支属于环境相关分支，在 getFlag() 里标了 @codeCoverageIgnore。
         DuckCoverage::_()->options['duckcoverage_flag'] = '';
 
+        // explainMarco 现在是 public：应用自己的 GetTestList 里可以先展开一段再返回
+        $this->assertSame('', DuckCoverage::_()->explainMarco(''));
+        $this->assertSame('#NOPE', DuckCoverage::_()->explainMarco('#NOPE'));
+
         // logException：把异常类名/错误码/位置/信息追加到 <duckcoverage_path>DuckCoverage.exception.log
         $log_path = DuckCoverageEx::_()->logException(new \RuntimeException("boom\nsecond line", 42));
         $this->assertNotSame('', $log_path);

@@ -63,6 +63,21 @@ EOT;
         $this->assertIsString(TestListerHelper::TestListByUserLogout());
         $this->assertIsString(TestListerHelper::TestListByUserClean());
 
+        // 这 6 个方法也做成了宏指令：在清单里写 #ADMIN_LOGIN / #USER_LOGOUT 就会嵌进对应清单。
+        // 用一个会回显 parameter 的假 lister 验证"参数确实被传下去了"。
+        \tests\DuckCoverage\TLApp::_()->options['duckcoverage_test_lister'] = function () {
+            return 'COMMENT lister_param=' . \DuckPhp\Core\App::_()->options['duckcoverage_test_lister_parameter'];
+        };
+        $macro_list = "#ADMIN_LOGIN\n#ADMIN_LOGOUT\n#ADMIN_CLEAN\n#USER_LOGIN\n#USER_LOGOUT\n#USER_CLEAN\n";
+        $expanded = TestListerHelper::_()->explainMarco($macro_list);
+        foreach (['login', 'logout', 'clean'] as $parameter) {
+            $this->assertStringContainsString("lister_param=$parameter", $expanded);
+        }
+        $this->assertSame(6, substr_count($expanded, 'COMMENT lister_param='));
+        \tests\DuckCoverage\TLApp::_()->options['duckcoverage_test_lister'] = null;
+        // 不是宏指令的 #XXX 原样保留
+        $this->assertSame('#NOPE', TestListerHelper::_()->explainMarco('#NOPE'));
+
         //TestListerHelper::_()->replaceLineStart($list);
 
 

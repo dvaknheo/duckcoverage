@@ -398,6 +398,8 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 | `#BUSINESS <Class@method> [args]` | 把该行改写为对 `<namespace>\Business\<Class>@<method>` 的 `CALL` |
 | `#MODEL <Class@method> [args]` | 把该行改写为对 `<namespace>\Model\<Class>@<method>` 的 `CALL` |
 | `#ACTION <Class@method> [args]` | 把该行改写为对 `<namespace>\Controller\<Class>@<method>` 的 `CALL` |
+| `#ADMIN_LOGIN` / `#ADMIN_LOGOUT` / `#ADMIN_CLEAN` | 嵌入管理员提供者在该状态下的清单：先切到管理员的 phase，把 `options['duckcoverage_test_lister_parameter']` 设为 `login` / `logout` / `clean`，展开回调清单，再切回。等价于 `TestListerHelper::TestListByAdminLogin()` 等 |
+| `#USER_LOGIN` / `#USER_LOGOUT` / `#USER_CLEAN` | 用户提供者同上——`TestListerHelper::TestListByUserLogin()` 等 |
 
 `#BUSINESS`、`#MODEL`、`#ACTION` 由 `genTestListOfAll()` 生成，是一种让清单更易读的简写；改写出的 `CALL` 会带上当前 phase 前缀。
 
@@ -517,6 +519,8 @@ public function doCommand()
 public function genTestListOfAll()
 public function callHandler($handler, $ext_args = [])
 public function watchingGetName()
+public function logException(\Throwable $ex)
+public function explainMarco($test_list)
 ```
 
 - `BeforeRun` / `AfterRun`（即 `_OnBeforeRun` / `_OnAfterRun`）只是钩子回调，仅在 route hook 模式下有行为。

@@ -58,6 +58,9 @@ class TestListerHelper
                 $ret[] = $this->doIncludeComponent($line, '#MODEL ', 'Model\\');
             } elseif (substr($line, 0, strlen('#ACTION ')) === '#ACTION ') {
                 $ret[] = $this->doIncludeComponent($line, '#ACTION ', 'Controller\\');
+            } elseif (preg_match('/^#(ADMIN|USER)_(LOGIN|LOGOUT|CLEAN)$/', $line, $matches)) {
+                // 见 README「Macro directives」：等价于调用 TestListByAdminLogin() 那几个静态方法
+                $ret[] = $this->doTestListOf($matches[1], strtolower($matches[2]));
             } else {
                 $ret[] = $line;
             }
@@ -207,6 +210,20 @@ class TestListerHelper
         $list .= $this->genTestListOfComponents();
         $list .= "\n";
         return $list;
+    }
+    /**
+     * `#ADMIN_LOGIN` / `#ADMIN_LOGOUT` / `#ADMIN_CLEAN` / `#USER_LOGIN` / `#USER_LOGOUT` / `#USER_CLEAN`
+     *
+     * 在对应提供者的 phase 下取测试清单并嵌进当前清单，等价于调用
+     * `TestListByAdminLogin()` / `TestListByUserLogout()` 这类静态方法。
+     *
+     * @param string $which     ADMIN | USER
+     * @param string $parameter login | logout | clean
+     */
+    protected function doTestListOf(string $which, string $parameter): string
+    {
+        $service = ($which === 'ADMIN') ? Admin::_() : User::_();
+        return $this->listOfAdminOrUser($service, $parameter);
     }
     /**
      * 在指定的"管理员/用户提供者"的 phase 下取测试清单。

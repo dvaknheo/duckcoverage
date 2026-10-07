@@ -281,7 +281,16 @@ class DuckCoverage extends ComponentBase
         }
         return $test_list;
     }
-    protected function explainMarco($test_list)
+    /**
+     * 展开测试清单里的宏指令（`#PHASE_BEGIN`、`#BUSINESS`、`#ADMIN_LOGIN` 等，见 README「Macro directives」）。
+     *
+     * 公开：应用自己的 `GetTestList()` 里可以先展开一段再返回；
+     * 等价于 `TestListerHelper::_()->explainMarco($test_list)`。
+     *
+     * @param string $test_list
+     * @return string
+     */
+    public function explainMarco($test_list)
     {
         return TestListerHelper::_()->explainMarco($test_list);
     }
