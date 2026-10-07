@@ -285,6 +285,38 @@ class DuckCoverage extends ComponentBase
     {
         return TestListerHelper::_()->explainMarco($test_list);
     }
+    /**
+     * 把异常记录到日志文件（追加一行）。日志路径：`<duckcoverage_path>DuckCoverage.exception.log`。
+     *
+     * 每行格式：时间 / 组名 / flag / 异常类名 / 错误码 / 抛出位置 / 错误信息。
+     * 信息里的换行会替换成空格，保证"一行一条异常"，方便 grep 与 tail。
+     *
+     * @param \Throwable $ex
+     * @return string 写出的日志文件路径；写失败时返回 ''
+     */
+    public function logException(\Throwable $ex)
+    {
+        $dir = (string)$this->options['duckcoverage_path'];
+        if ($dir !== '' && !is_dir($dir)) {
+            @mkdir($dir, 0777, true); // @codeCoverageIgnore
+        }
+        $path = $dir . 'DuckCoverage.exception.log';
+        $line = sprintf(
+            "[%s] group=%s flag=%s class=%s code=%d at=%s:%d message=%s\n",
+            DATE(DATE_ATOM),
+            (string)$this->current_group,
+            $this->getFlag(),
+            get_class($ex),
+            (int)$ex->getCode(),
+            (string)$ex->getFile(),
+            (int)$ex->getLine(),
+            str_replace(["\r", "\n"], ' ', $ex->getMessage())
+        );
+        if (@file_put_contents($path, $line, FILE_APPEND) === false) {
+            return ''; // @codeCoverageIgnore
+        }
+        return $path;
+    }
     //////////////////
     public function genTestListOfAll()
     {

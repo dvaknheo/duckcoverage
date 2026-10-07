@@ -263,6 +263,7 @@ All paths below are relative to `<runtime>` (DuckPHP's `path_runtime`, `runtime/
 | `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/` | `--report a b c` (multiple groups), or any report with `duckcoverage_report_direct => true` |
 | `<runtime>/DuckCoverage/<group>.DuckPhpData.config.json` | the per-group DuckPHP data file used while a group is watched |
 | `<report dir>/report.json` | every report — the machine-readable version of the same report (see below) |
+| `<runtime>/DuckCoverage/DuckCoverage.exception.log` | `logException()` — appended exceptions, one line each (time, group, flag, class, code, location, message) |
 
 The server also answers every request with two diagnostic headers: `x-duckcoverage-group` (the group the request was collected into) and `x-duckcoverage-datafile` (the data file in use).
 
@@ -445,7 +446,7 @@ public $options = [
 |---|---|---|
 | `duckcoverage_enable` | — | Main switch. It is read through `App::Setting()`, so set it in the application setting file (`config/DuckPhpSettings.config.php`) or in `.env`; it is not an application option of this package. |
 | `duckcoverage_stop_init` | `false` | Reserved for the future. When `true`, `init()` returns immediately and skips all configuration — the extension is not set up at all. Unrelated to the switch above. |
-| `duckcoverage_test_lister` | `null` | Callable returning the play list; its `GetTestList()` text is expanded through `explainMarco()`. |
+| `duckcoverage_test_lister` | `null` | Callable returning the play list; its `GetTestList()` text is expanded through `explainMarco()`. Ready-made callbacks for admin/user providers: `TestListerHelper::TestListByAdminLogin()` / `...AdminLogout()` / `...AdminClean()` and the `...UserLogin()` / `...UserLogout()` / `...UserClean()` trio — each switches to that provider's phase first. |
 | `duckcoverage_flag` | `''` | A string carried into the application: read it with `getFlag()`; in web mode it travels as the `X-DuckCoverage-Flag` request header. Overridden by `--flag=<value>`. |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | Moves the additional options file to a new location to isolate the configuration environment. While a group is watched it becomes `DuckCoverage/<group>.DuckPhpData.config.json`. |
 | `duckcoverage_reg_console_command` | `true` | Register the CLI command so that `cover` is available. Registration happens before the enable check, so `cover` can report that the feature is switched off. |

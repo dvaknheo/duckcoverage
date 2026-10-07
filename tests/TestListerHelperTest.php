@@ -36,6 +36,33 @@ EOT;
         echo TestListerHelper::_()->explainMarco($list);
         TestListerHelper::_()->explainMarco('');
 
+        // Admin/User 提供者辅助：带 phase() 的服务（配置了提供者时 Admin/User 会被换成 PhaseProxy）
+        // 走它自己的 phase；用完切回原来的 phase 并清掉临时参数
+        $phase_before = (string)\DuckPhp\Core\App::Phase();
+        $service = new class($phase_before) {
+            private $phase;
+            public function __construct($phase)
+            {
+                $this->phase = $phase;
+            }
+            public function phase()
+            {
+                return $this->phase;
+            }
+        };
+        $this->assertIsString(TestListerHelper::_()->listOfAdminOrUser($service, 'login'));
+        $this->assertSame($phase_before, (string)\DuckPhp\Core\App::Phase());
+        $this->assertNull(\DuckPhp\Core\App::_()->options['duckcoverage_test_lister_parameter']);
+        // 没有 phase() 的普通对象：回落到当前 phase，不致命错误
+        $this->assertIsString(TestListerHelper::_()->listOfAdminOrUser(new \stdClass(), 'logout'));
+        // 6 个便捷入口（本测试没配提供者，Admin/User 是普通组件，走回落分支）
+        $this->assertIsString(TestListerHelper::TestListByAdminLogin());
+        $this->assertIsString(TestListerHelper::TestListByAdminLogout());
+        $this->assertIsString(TestListerHelper::TestListByAdminClean());
+        $this->assertIsString(TestListerHelper::TestListByUserLogin());
+        $this->assertIsString(TestListerHelper::TestListByUserLogout());
+        $this->assertIsString(TestListerHelper::TestListByUserClean());
+
         //TestListerHelper::_()->replaceLineStart($list);
 
 

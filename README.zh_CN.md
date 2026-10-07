@@ -266,6 +266,7 @@ php cli.php cover --go group1 --flag=admin
 | `<runtime>/DuckCoverage/<duckcoverage_report_default_dir>/` | `--report a b c`（多组），或任何 `duckcoverage_report_direct => true` 的报告 |
 | `<runtime>/DuckCoverage/<组名>.DuckPhpData.config.json` | 监听某个组期间使用的按组 DuckPHP 数据文件 |
 | `<报告目录>/report.json` | 每份报告都会输出 —— 同一份报告的机器可读版本（见下） |
+| `<runtime>/DuckCoverage/DuckCoverage.exception.log` | `logException()` —— 追加记录的异常，一行一条（时间/组名/flag/类名/错误码/位置/信息） |
 
 服务端还会在响应里带上两个诊断头：`x-duckcoverage-group`（这次请求被采集到的组）与 `x-duckcoverage-datafile`（正在使用的数据文件）。
 
@@ -448,7 +449,7 @@ public $options = [
 |---|---|---|
 | `duckcoverage_enable` | — | 主开关。它由 `App::Setting()` 读取，所以配置在应用设置文件（`config/DuckPhpSettings.config.php`）或 `.env` 里；它不是本包的应用选项 |
 | `duckcoverage_stop_init` | `false` | 预留。置 `true` 时 `init()` 立即返回、跳过全部配置——扩展完全不初始化。与上面的开关无关 |
-| `duckcoverage_test_lister` | `null` | 返回回放清单的可调用对象；其 `GetTestList()` 文本会被 `explainMarco()` 展开 |
+| `duckcoverage_test_lister` | `null` | 返回回放清单的可调用对象；其 `GetTestList()` 文本会被 `explainMarco()` 展开。管理员/用户提供者可直接用现成回调：`TestListerHelper::TestListByAdminLogin()` / `...AdminLogout()` / `...AdminClean()`，以及 `...UserLogin()` / `...UserLogout()` / `...UserClean()` 三个——它们会先切到该提供者的 phase |
 | `duckcoverage_flag` | `''` | 带进应用的标记：用 `getFlag()` 读取；web 模式下随请求放进 `X-DuckCoverage-Flag` 头。可被 `--flag=<值>` 覆盖 |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | 把额外选项文件移到新位置，隔离配置环境。监听某个组期间会变成 `DuckCoverage/<组名>.DuckPhpData.config.json` |
 | `duckcoverage_reg_console_command` | `true` | 注册命令行，使 `cover` 指令生效。注册发生在开关判断之前，所以关掉开关时 `cover` 仍能提示功能未开启 |

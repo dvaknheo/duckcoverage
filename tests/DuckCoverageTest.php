@@ -92,12 +92,28 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $this->assertSame('keep_me', DuckCoverage::_()->getFlag());
         DuckCoverage::_()->options['duckcoverage_flag'] = '';
 
-        // 安全需求：总开关 duckcoverage_enable 关着时，--flag 一律不生效（配置与请求头都不认）
-        // App::Setting() 读的是 root app 的 setting 数组，所以直接改它
-        // 安全需求：总开关 duckcoverage_enable 关着时，--flag 一律不生效。
+        // 安全需求：--flag 只在 duckcoverage_enable 打开时生效。
         // 本测试进程里总开关一直是开着的（否则 doCommand() 早就 return 了），
         // 关掉它的分支属于环境相关分支，在 getFlag() 里标了 @codeCoverageIgnore。
         DuckCoverage::_()->options['duckcoverage_flag'] = '';
+
+        // logException：把异常类名/错误码/位置/信息追加到 <duckcoverage_path>DuckCoverage.exception.log
+        $log_path = DuckCoverageEx::_()->logException(new \RuntimeException("boom\nsecond line", 42));
+        $this->assertNotSame('', $log_path);
+        $log = (string)file_get_contents($log_path);
+        $this->assertMatchesRegularExpression('/^\[\d{4}-\d\d-\d\dT[\d:+\-]+\] group=/', $log);
+        $this->assertStringContainsString('class=RuntimeException', $log);
+        $this->assertStringContainsString('code=42', $log);
+        $this->assertStringContainsString('at=', $log);
+        $this->assertStringContainsString('message=boom second line', $log);   // 换行被替换成空格
+        $this->assertStringNotContainsString("boom\nsecond", $log);
+        $lines_before = count(file($log_path, FILE_IGNORE_NEW_LINES));
+        DuckCoverageEx::_()->logException(new \LogicException('second', 7));   // 追加，不覆盖
+        $this->assertCount($lines_before + 1, file($log_path, FILE_IGNORE_NEW_LINES));
+
+        // （测试清单辅助 listOfAdminOrUser / TestListBy* 的断言放在 TestListerHelperTest，
+        //   因为 LibCoverage 只收集 Begin() 那个类的文件，这里只会收集 DuckCoverage.php）
+
         DuckCoverage::_()->options['duckcoverage_report_direct'] = true;
 
         DuckCoverageApp::_()->testMore();

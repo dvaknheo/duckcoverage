@@ -10,6 +10,8 @@ use DuckPhp\Core\App;
 use DuckPhp\Core\Console;
 use DuckPhp\Core\SingletonExTrait;
 use DuckPhp\Ext\RouteLister;
+use DuckPhp\GlobalAdmin\Admin;
+use DuckPhp\GlobalUser\User;
 
 class TestListerHelper
 {
@@ -206,6 +208,77 @@ class TestListerHelper
         $list .= "\n";
         return $list;
     }
+    /**
+     * 在指定的"管理员/用户提供者"的 phase 下取测试清单。
+     *
+     * DuckAdmin/DuckUser 这类应用同一时刻只有一个提供者生效，所以清单要在对应 phase 下生成：
+     * 先切到 `$service` 自己的 phase，把 `$parameter`（login|logout|clean|null）放进
+     * `options['duckcoverage_test_lister_parameter']` 供回调读取，取完清单再切回原来的 phase
+     * （App::Phase() 返回切换前的 phase）。$service->phase() 为何可用见方法内的英文注释。
+     *
+     * @param object $service
+     * @param string|null $parameter null | 'login' | 'logout' | 'clean'
+     * @return string
+     */
+    public function listOfAdminOrUser($service, ?string $parameter): string
+    {
+        /*
+         * Why can we call $service->phase()?
+         *
+         * During DuckPHP's initialization, when an Admin or User provider is configured, the framework
+         * REPLACES the Admin/User class with a PhaseProxy instance (see DuckPhp\Component\PhaseProxy and
+         * the CreatePhaseProxy() call inside DuckPhp\GlobalAdmin\Admin). That proxy is bound to the
+         * provider's phase and exposes phase() for it, which is exactly the question we need answered
+         * here: "which phase is this provider active in?".
+         *
+         * So $service->phase() is the normal, supported call. A plain object that has no provider behind
+         * it (nothing configured, or a stub in tests) has no phase(), so fall back to the current phase
+         * instead of fataling.
+         */
+        $phase = method_exists($service, 'phase') ? (string)$service->phase() : (string)App::Phase();
+        $last = App::Phase($phase);
+
+        App::_()->options['duckcoverage_test_lister_parameter'] = $parameter;
+
+        $lister = App::_()->options['duckcoverage_test_lister'] ?? null;
+        $body = $lister ? (string)($lister)() : '';
+        $out = $this->explainMarco($body);
+        App::_()->options['duckcoverage_test_lister_parameter'] = null;
+        App::Phase($last);
+
+        return $out;
+    }
+    /** 管理员提供者：登录态的测试清单（可直接当 options['duckcoverage_test_lister'] 用） */
+    public static function TestListByAdminLogin()
+    {
+        return static::_()->listOfAdminOrUser(Admin::_(), 'login');
+    }
+    /** 管理员提供者：登出态 */
+    public static function TestListByAdminLogout()
+    {
+        return static::_()->listOfAdminOrUser(Admin::_(), 'logout');
+    }
+    /** 管理员提供者：清理态 */
+    public static function TestListByAdminClean()
+    {
+        return static::_()->listOfAdminOrUser(Admin::_(), 'clean');
+    }
+    /** 用户提供者：登录态 */
+    public static function TestListByUserLogin()
+    {
+        return static::_()->listOfAdminOrUser(User::_(), 'login');
+    }
+    /** 用户提供者：登出态 */
+    public static function TestListByUserLogout()
+    {
+        return static::_()->listOfAdminOrUser(User::_(), 'logout');
+    }
+    /** 用户提供者：清理态 */
+    public static function TestListByUserClean()
+    {
+        return static::_()->listOfAdminOrUser(User::_(), 'clean');
+    }
+
     // public function replaceLineStart(string $content, array $rules): string
     // {
     //     foreach ($rules as $prefix => $append) {
