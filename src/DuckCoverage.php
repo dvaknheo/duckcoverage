@@ -244,13 +244,25 @@ class DuckCoverage extends ComponentBase
             return $this->make_name_of_http();
         }
     }
+    /**
+     * dump 名字的前缀：`[组名 flag=<flag> 时间]`。
+     *
+     * flag 来自 getFlag()（web 模式下是请求头里的那个），为空时不带 flag 段，
+     * 这样没用到 --flag 的项目名字与以前完全一致。
+     */
+    protected function namePrefix(): string
+    {
+        $flag = $this->getFlag();
+        $flag_part = ($flag === '') ? '' : ' flag=' . $flag;
+        return "[{$this->current_group}{$flag_part} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]";
+    }
     protected function make_name_of_cli()
     {
         $argv = SuperGlobal::_()->_SERVER('argv', []);
         $argsOnly = array_slice($argv, 1);
         $cmd = implode(' ', array_map('escapeshellarg', $argsOnly));
         $request = 'MAN-RUN '.$cmd;
-        return "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
+        return $this->namePrefix() . $request;
     }
     protected function make_name_of_http()
     {
@@ -262,7 +274,7 @@ class DuckCoverage extends ComponentBase
         $post = SuperGlobal::_()->_POST();
         $request .= $post ? ' '.http_build_query($post) : '';
         $request = 'MAN-WEB '.$request;
-        return "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
+        return $this->namePrefix() . $request;
     }
     protected function call_http_handler($name)
     {
@@ -705,7 +717,7 @@ trait DuckCoverage_CommandTrait
         echo "\033[42;30m".$request."\033[0m\n";
 
         $argv = explode(" ", $request);
-        $this->current_name = "[{$this->current_group} " . (new \DateTime())->format('Y-m-d_H_i_s.v') . "]" . $request;
+        $this->current_name = $this->namePrefix() . $request;
         $cmd = array_shift($argv);
         $call = ucfirst(strtolower($cmd));
         $method = "explain" . $call;
@@ -770,7 +782,14 @@ trait DuckCoverage_CommandTrait
     protected function explainCall(array $argv)
     {
         $this->doBegin();
-        $this->callHandler(implode(" ", $argv));
+        try {
+            $this->callHandler(implode(" ", $argv));
+        } catch (\Throwable $ex) {
+            // 一条 CALL 出异常不该中断整轮回放：记进 DuckCoverage.exception.log 后继续，
+            // doEnd() 照旧收尾，异常之前采到的覆盖数据不会丢。
+            $this->logException($ex);
+            echo "\033[41;30mCALL failed: " . get_class($ex) . ': ' . $ex->getMessage() . "\033[0m\n";
+        }
         $this->doEnd();
     }
     protected function explainSetweb(array $argv)

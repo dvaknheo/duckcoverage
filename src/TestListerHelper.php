@@ -46,6 +46,8 @@ class TestListerHelper
             $line = rtrim($line);
             if ($line === '#PHASE_BEGIN') {
                 $ret[] = $this->doPhaseBegin();
+            } elseif ($line === '#CURRENT_PHASE') {
+                $ret[] = $this->doCurrentPhase();
             } elseif ($line === '#PHASE_END') {
                 $ret[] = $this->doPhaseEnd();
             } elseif (substr($line, 0, strlen('#INCLUDE_CALL ')) === '#INCLUDE_CALL ') {
@@ -72,6 +74,16 @@ class TestListerHelper
         $phase = App::Phase();
         $this->last_phase = App::_()->getLastPhase();
         return "PHASE $phase";
+    }
+    /**
+     * `#CURRENT_PHASE`：等价于指令 `PHASE {App::Phase()}`
+     *
+     * 只是把当前 phase 显式写进清单（不记录 last_phase，也不改变当前 phase），
+     * 适合在清单中间"锁一下当前 phase"。
+     */
+    protected function doCurrentPhase(): string
+    {
+        return 'PHASE ' . App::Phase();
     }
     protected function doPhaseEnd()
     {

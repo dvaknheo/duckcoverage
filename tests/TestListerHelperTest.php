@@ -77,6 +77,8 @@ EOT;
         \tests\DuckCoverage\TLApp::_()->options['duckcoverage_test_lister'] = null;
         // 不是宏指令的 #XXX 原样保留
         $this->assertSame('#NOPE', TestListerHelper::_()->explainMarco('#NOPE'));
+        // #CURRENT_PHASE 等价于指令 PHASE {App::Phase()}
+        $this->assertSame('PHASE ' . \DuckPhp\Core\App::Phase(), TestListerHelper::_()->explainMarco('#CURRENT_PHASE'));
 
         //TestListerHelper::_()->replaceLineStart($list);
 

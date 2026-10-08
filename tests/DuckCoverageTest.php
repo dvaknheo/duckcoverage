@@ -115,6 +115,21 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         DuckCoverageEx::_()->logException(new \LogicException('second', 7));   // 追加，不覆盖
         $this->assertCount($lines_before + 1, file($log_path, FILE_IGNORE_NEW_LINES));
 
+        // current_name 要把 flag 带进去（readCommand 会按当前 flag 重建名字）
+        DuckCoverage::_()->options['duckcoverage_flag'] = 'name_flag';
+        DuckCoverageEx::_()->readCommand('COMMENT x');
+        $this->assertStringContainsString('flag=name_flag', DuckCoverageEx::_()->testCurrentName());
+        DuckCoverage::_()->options['duckcoverage_flag'] = '';
+
+        // CALL 出异常：记进 DuckCoverage.exception.log，整轮回放不中断（doEnd 照旧收尾）。
+        // 用 :: 走静态调用（@ 在本框架里是"取单例 _() 再调"，夹具是普通类）
+        ob_start();
+        DuckCoverageEx::_()->testExplainCall([DuckCoverageThrowingCallable::class . '::boom']);
+        $call_output = (string)ob_get_clean();
+        $this->assertStringContainsString('CALL failed', $call_output);
+        $this->assertStringContainsString('boom-in-call', (string)file_get_contents($log_path));
+        $this->assertGreaterThan($lines_before + 1, count(file($log_path, FILE_IGNORE_NEW_LINES)));
+
         // （测试清单辅助 listOfAdminOrUser / TestListBy* 的断言放在 TestListerHelperTest，
         //   因为 LibCoverage 只收集 Begin() 那个类的文件，这里只会收集 DuckCoverage.php）
 
@@ -423,6 +438,17 @@ class DuckCoverageEx extends DuckCoverage
     public function testIsJsonlRequested(): bool
     {
         return $this->isJsonlRequested();
+    }
+    public function testCurrentName(): string
+    {
+        return (string)$this->current_name;
+    }
+    /**
+     * @param array<int, string> $argv
+     */
+    public function testExplainCall(array $argv): void
+    {
+        $this->explainCall($argv);
     }
     /**
      * 立刻走一遍 prepareCurl()，把要发出去的请求头拿出来看
@@ -740,5 +766,13 @@ class JustDuckCoverageCli extends DuckCoverage
     public function is_cli()
     {
         return parent::is_cli();
+    }
+}
+/** CALL 指令的异常夹具：被 CALL 时应抛异常，用来验证 DuckCoverage 会 logException 并继续 */
+class DuckCoverageThrowingCallable
+{
+    public static function boom()
+    {
+        throw new \RuntimeException('boom-in-call', 123);
     }
 }
