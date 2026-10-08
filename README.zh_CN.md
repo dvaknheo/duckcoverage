@@ -251,6 +251,7 @@ php cli.php cover --go group1 --flag=admin
 - 也可以只写在配置里（`'duckcoverage_flag' => 'admin'`），命令行给的值优先。
 - 裸 `--flag`（不带值）不改变任何配置；没有设置 flag 时完全不发这个头。值在放进 header 前会去掉 CR/LF。
 - 只在 `duckcoverage_enable` 打开时生效：总开关关着时 `getFlag()` 恒返回空串——`--flag`、配置项、请求头一概不认，请求头也不会发出去。这是有意为之：工具关着的时候，外部请求不能靠一个头去影响应用的行为。
+- flag 也会进 dump 名字（`[<组名> flag=<值> <时间>]<请求>`），因此 `<组名>.list.log` 与 dump 文件哈希能看出这次采集用的是什么 flag；没有 flag 时名字格式与以前完全一致。
 
 ## 输出路径
 
@@ -380,7 +381,7 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 |---|---|
 | `WEB <uri> [post] [AJAX\|OPTIONS]` | 回放一个 HTTP 请求；第二段是 POST 参数（`a=1&b=2`），第三段可写 `AJAX` 或 `OPTIONS` |
 | `RUN <命令>` | **在当前进程内**重新派发本应用的 CLI 命令（不单开进程），这也是它能被采集到覆盖率的原因 |
-| `CALL <class/@method [name=value]>` | 调用本地可调用对象（类/函数） |
+| `CALL <class/@method [name=value]>` | 调用本地可调用对象（类/函数）。抛异常时会经 `logException()` 记到 `DuckCoverage.exception.log`，回放继续走下一条（dump 照旧正常收尾） |
 | `SETWEB <pre_curl> <pre_webcall> <post_webcall> <post_curl>` | 为后续 `WEB` 行设置 curl / web 钩子（`_` 表示清除） |
 | `PHASE <phase>` | 切换 DuckPHP phase |
 | `COMMENT 注释` | 忽略 |
@@ -400,8 +401,40 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 | `#ACTION <Class@method> [args]` | 把该行改写为对 `<namespace>\Controller\<Class>@<method>` 的 `CALL` |
 | `#ADMIN_LOGIN` / `#ADMIN_LOGOUT` / `#ADMIN_CLEAN` | 嵌入管理员提供者在该状态下的清单：先切到管理员的 phase，把 `options['duckcoverage_test_lister_parameter']` 设为 `login` / `logout` / `clean`，展开回调清单，再切回。等价于 `TestListerHelper::TestListByAdminLogin()` 等 |
 | `#USER_LOGIN` / `#USER_LOGOUT` / `#USER_CLEAN` | 用户提供者同上——`TestListerHelper::TestListByUserLogin()` 等 |
+| `#CURRENT_PHASE` | 展开成 `PHASE {App::Phase()}`——把当前 phase 写进清单（不切 phase，也不记 `last_phase`） |
 
 `#BUSINESS`、`#MODEL`、`#ACTION` 由 `genTestListOfAll()` 生成，是一种让清单更易读的简写；改写出的 `CALL` 会带上当前 phase 前缀。
+
+### 采集管理员与用户提供者
+
+DuckAdmin / DuckUser 这类应用有多个"提供者"（管理员、用户），而同一时刻只有一个生效，所以一份清单覆盖不了全部——每个提供者都要各自跑一轮采集。`options['duckcoverage_test_lister_parameter']` 负责把"这次采的是哪个状态"（`login` / `logout` / `clean`）带进你的清单回调，下面这些辅助会**先切到对应提供者的 phase** 再取清单：
+
+| 清单里写 | 会发生什么 |
+|---|---|
+| `#ADMIN_LOGIN` / `#ADMIN_LOGOUT` / `#ADMIN_CLEAN` | 切到管理员提供者的 phase、设置参数、展开清单并嵌入、再切回。等价于 `TestListerHelper::TestListByAdminLogin()` 那几个静态方法 |
+| `#USER_LOGIN` / `#USER_LOGOUT` / `#USER_CLEAN` | 用户提供者同理（`TestListByUserLogin()` 等） |
+| `#CURRENT_PHASE` | 把当前 phase 写成 `PHASE {App::Phase()}` 嵌进清单；不切 phase |
+
+你的清单回调有两种方式消费这个参数：
+
+- 自己读 `App::_()->options['duckcoverage_test_lister_parameter']`（现成回调取完会清掉它）；
+- 继承 `DuckCoverage\TestListWithAuthBase` 实现四个分支：它的 `GetTestList()` 会读取参数、**消费掉**（`unset`）再分派——参数缺失或未知都走 `_GetTestListFull()`。
+
+```php
+class MyTestList extends \DuckCoverage\TestListWithAuthBase
+{
+    public function _GetTestListForLogin(): string  { return "WEB /admin/user/list"; }
+    public function _GetTestListForLogout(): string { return "WEB /admin/logout"; }
+    public function _GetTestListForClean(): string  { return "WEB /admin/setting/clear"; }
+    public function _GetTestListFull(): string      { return "#ADMIN_LOGIN\n#ADMIN_LOGOUT"; }
+}
+```
+
+把 `duckcoverage_test_lister` 指向它，然后**一个状态一个组**地采集。配合 `--flag`（见「给应用传一个标记」）——它会进 dump 名字、也会随请求头走，每轮采集都能区分开：
+
+```bash
+php cli.php cover --go admin_login --flag=admin
+```
 
 ### 补充说明
 
@@ -451,7 +484,7 @@ public $options = [
 |---|---|---|
 | `duckcoverage_enable` | — | 主开关。它由 `App::Setting()` 读取，所以配置在应用设置文件（`config/DuckPhpSettings.config.php`）或 `.env` 里；它不是本包的应用选项 |
 | `duckcoverage_stop_init` | `false` | 预留。置 `true` 时 `init()` 立即返回、跳过全部配置——扩展完全不初始化。与上面的开关无关 |
-| `duckcoverage_test_lister` | `null` | 返回回放清单的可调用对象；其 `GetTestList()` 文本会被 `explainMarco()` 展开。管理员/用户提供者可直接用现成回调：`TestListerHelper::TestListByAdminLogin()` / `...AdminLogout()` / `...AdminClean()`，以及 `...UserLogin()` / `...UserLogout()` / `...UserClean()` 三个——它们会先切到该提供者的 phase |
+| `duckcoverage_test_lister` | `null` | 返回回放清单的可调用对象；其 `GetTestList()` 文本会被 `explainMarco()` 展开。管理员/用户提供者可直接用现成回调：`TestListerHelper::TestListByAdminLogin()` / `...AdminLogout()` / `...AdminClean()`，以及 `...UserLogin()` / `...UserLogout()` / `...UserClean()` 三个——它们会先切到该提供者的 phase。有管理员/用户提供者的应用还可以继承 `TestListWithAuthBase` 并实现 `_GetTestListForLogin()` / `_GetTestListForLogout()` / `_GetTestListForClean()` / `_GetTestListFull()`：`#ADMIN_LOGIN` 等设置的那个参数会被基类消费掉并选择对应分支 |
 | `duckcoverage_flag` | `''` | 带进应用的标记：用 `getFlag()` 读取；web 模式下随请求放进 `X-DuckCoverage-Flag` 头。可被 `--flag=<值>` 覆盖 |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | 把额外选项文件移到新位置，隔离配置环境。监听某个组期间会变成 `DuckCoverage/<组名>.DuckPhpData.config.json` |
 | `duckcoverage_reg_console_command` | `true` | 注册命令行，使 `cover` 指令生效。注册发生在开关判断之前，所以关掉开关时 `cover` 仍能提示功能未开启 |

@@ -248,6 +248,7 @@ php cli.php cover --go group1 --flag=admin
 - It can also come from the options (`'duckcoverage_flag' => 'admin'`); the command-line value wins.
 - A bare `--flag` (no value) changes nothing, and when no flag is set the header is not sent at all. CR/LF are stripped before the value goes into a header.
 - Only effective while `duckcoverage_enable` is on: with the master switch off, `getFlag()` returns an empty string — `--flag`, the option and the request header are all ignored, and the header is not sent either. This is deliberate: an incoming header must not be able to influence the application while the tool is switched off.
+- The flag is part of the dump name as well (`[<group> flag=<value> <time>]<request>`), so `<group>.list.log` and the dump file hashes record which flag a collection ran with. With no flag the name keeps its old format.
 
 ## Output Paths
 
@@ -377,7 +378,7 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 |---|---|
 | `WEB <uri> [post] [AJAX\|OPTIONS]` | Play an HTTP request. The second part is POST data (`a=1&b=2`); the third part may be `AJAX` or `OPTIONS`. |
 | `RUN <command>` | Re-dispatch a CLI command of the same application **in the current process** (no child process), which is what makes its coverage collectable. |
-| `CALL <class/@method [name=value]>` | Invoke a local callable object (class or function). |
+| `CALL <class/@method [name=value]>` | Invoke a local callable object (class or function). If it throws, the exception goes to `DuckCoverage.exception.log` through `logException()` and playback continues with the next line (the dump is still closed properly). |
 | `SETWEB <pre_curl> <pre_webcall> <post_webcall> <post_curl>` | Set curl / web hooks for subsequent `WEB` lines (`_` clears a hook). |
 | `PHASE <phase>` | Switch the DuckPHP phase. |
 | `COMMENT text` | Ignore the line. |
@@ -397,8 +398,40 @@ Macro directives are expanded by `TestListerHelper::explainMarco()` in the text 
 | `#ACTION <Class@method> [args]` | Rewrite the line into a `CALL` against `<namespace>\Controller\<Class>@<method>`. |
 | `#ADMIN_LOGIN` / `#ADMIN_LOGOUT` / `#ADMIN_CLEAN` | Embed the admin provider's list for that state. Switches to the admin provider's phase, sets `options['duckcoverage_test_lister_parameter']` to `login` / `logout` / `clean`, expands the callback's list, then switches back. Same as `TestListerHelper::TestListByAdminLogin()` etc. |
 | `#USER_LOGIN` / `#USER_LOGOUT` / `#USER_CLEAN` | Same for the user provider — `TestListerHelper::TestListByUserLogin()` etc. |
+| `#CURRENT_PHASE` | Emit `PHASE {App::Phase()}` — writes the current phase into the list. It does not switch phases and does not touch `last_phase`. |
 
 `#BUSINESS`, `#MODEL` and `#ACTION` are produced by `genTestListOfAll()`; they are shorthand so that generated lists stay readable. Every rewritten `CALL` is prefixed with the current phase.
+
+### Collecting admin and user providers
+
+DuckAdmin- and DuckUser-style applications have several providers (admin, user) and only one of them can be active at a time, so a single test list cannot cover them all — each provider needs its own collection run. `options['duckcoverage_test_lister_parameter']` carries *which state* is being collected (`login` / `logout` / `clean`) into your lister, and these helpers switch to the provider's phase before asking for the list:
+
+| What you write in the list | What happens |
+|---|---|
+| `#ADMIN_LOGIN` / `#ADMIN_LOGOUT` / `#ADMIN_CLEAN` | Switch to the admin provider's phase, set the parameter, embed the expanded list, switch back. Same as `TestListerHelper::TestListByAdminLogin()` and friends. |
+| `#USER_LOGIN` / `#USER_LOGOUT` / `#USER_CLEAN` | Same for the user provider (`TestListByUserLogin()` and friends). |
+| `#CURRENT_PHASE` | Writes the current phase into the list as `PHASE {App::Phase()}`; it does not switch phases. |
+
+Your lister can consume the parameter in either of two ways:
+
+- Read `App::_()->options['duckcoverage_test_lister_parameter']` yourself (the ready-made callbacks clear it after use).
+- Extend `DuckCoverage\TestListWithAuthBase` and implement the four branches; `GetTestList()` reads the parameter, **consumes** it (`unset`) and dispatches — a missing or unknown parameter goes to `_GetTestListFull()`.
+
+```php
+class MyTestList extends \DuckCoverage\TestListWithAuthBase
+{
+    public function _GetTestListForLogin(): string  { return "WEB /admin/user/list"; }
+    public function _GetTestListForLogout(): string { return "WEB /admin/logout"; }
+    public function _GetTestListForClean(): string  { return "WEB /admin/setting/clear"; }
+    public function _GetTestListFull(): string      { return "#ADMIN_LOGIN\n#ADMIN_LOGOUT"; }
+}
+```
+
+Point `duckcoverage_test_lister` at it and collect one group per state. `--flag` (see “Passing a flag to the application”) rides along in the dump name and in the request header, so every collection stays distinguishable:
+
+```bash
+php cli.php cover --go admin_login --flag=admin
+```
 
 ### Additional notes
 
@@ -448,7 +481,7 @@ public $options = [
 |---|---|---|
 | `duckcoverage_enable` | — | Main switch. It is read through `App::Setting()`, so set it in the application setting file (`config/DuckPhpSettings.config.php`) or in `.env`; it is not an application option of this package. |
 | `duckcoverage_stop_init` | `false` | Reserved for the future. When `true`, `init()` returns immediately and skips all configuration — the extension is not set up at all. Unrelated to the switch above. |
-| `duckcoverage_test_lister` | `null` | Callable returning the play list; its `GetTestList()` text is expanded through `explainMarco()`. Ready-made callbacks for admin/user providers: `TestListerHelper::TestListByAdminLogin()` / `...AdminLogout()` / `...AdminClean()` and the `...UserLogin()` / `...UserLogout()` / `...UserClean()` trio — each switches to that provider's phase first. |
+| `duckcoverage_test_lister` | `null` | Callable returning the play list; its `GetTestList()` text is expanded through `explainMarco()`. Ready-made callbacks for admin/user providers: `TestListerHelper::TestListByAdminLogin()` / `...AdminLogout()` / `...AdminClean()` and the `...UserLogin()` / `...UserLogout()` / `...UserClean()` trio — each switches to that provider's phase first. Apps with admin/user providers can also extend `TestListWithAuthBase` and implement `_GetTestListForLogin()` / `_GetTestListForLogout()` / `_GetTestListForClean()` / `_GetTestListFull()`: the parameter set by `#ADMIN_LOGIN` and friends selects the branch and is consumed by the base class. |
 | `duckcoverage_flag` | `''` | A string carried into the application: read it with `getFlag()`; in web mode it travels as the `X-DuckCoverage-Flag` request header. Overridden by `--flag=<value>`. |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | Moves the additional options file to a new location to isolate the configuration environment. While a group is watched it becomes `DuckCoverage/<group>.DuckPhpData.config.json`. |
 | `duckcoverage_reg_console_command` | `true` | Register the CLI command so that `cover` is available. Registration happens before the enable check, so `cover` can report that the feature is switched off. |
