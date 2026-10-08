@@ -15,7 +15,6 @@ use DuckPhp\Core\Route;
 use DuckPhp\Core\SuperGlobal;
 use DuckPhp\Core\SystemWrapper;
 use DuckPhp\HttpServer\HttpServer;
-use LibCoverage\GroupCoverage;
 
 class DuckCoverage extends ComponentBase
 {
@@ -82,6 +81,15 @@ class DuckCoverage extends ComponentBase
     }
     public static function Prepare($options = [])
     {
+        // Register the class as shared BEFORE resolving the instance. Order matters:
+        //
+        // PhaseContainer::_GetObject() looks in the *current* container first and returns whatever it
+        // finds there; only a miss falls back to the shared "#shared" container, and only for classes
+        // registered here. Resolving the instance first would therefore create it inside the root
+        // container (''), and any later call made from a sub-application phase would miss both the
+        // current container and "#shared", silently create a second, uninited DuckCoverage and lose
+        // the whole runtime state (duckcoverage_path, current_group, flag).
+        PhaseContainer::_()->addSharedClasses([static::class => true, Console::class => true]);
         return static::_()->beforeInit($options);
     }
     public static function InitedThenGoRouteHookMode()
