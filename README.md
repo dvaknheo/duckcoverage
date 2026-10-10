@@ -483,6 +483,7 @@ public $options = [
 | `duckcoverage_stop_init` | `false` | Reserved for the future. When `true`, `init()` returns immediately and skips all configuration — the extension is not set up at all. Unrelated to the switch above. |
 | `duckcoverage_test_lister` | `null` | Callable returning the play list; its `GetTestList()` text is expanded through `explainMarco()`. Ready-made callbacks for admin/user providers: `TestListerHelper::TestListByAdminLogin()` / `...AdminLogout()` / `...AdminClean()` and the `...UserLogin()` / `...UserLogout()` / `...UserClean()` trio — each switches to that provider's phase first. Apps with admin/user providers can also extend `TestListWithAuthBase` and implement `_GetTestListForLogin()` / `_GetTestListForLogout()` / `_GetTestListForClean()` / `_GetTestListFull()`: the parameter set by `#ADMIN_LOGIN` and friends selects the branch and is consumed by the base class. |
 | `duckcoverage_flag` | `''` | A string carried into the application: read it with `getFlag()`; in web mode it travels as the `X-DuckCoverage-Flag` request header. Overridden by `--flag=<value>`. |
+| `duckcoverage_exclude` | `[]` | Directories or files to leave out of collection and reports. Entries may be project-relative (`src/ThirdParty`), source-relative (`ThirdParty`), absolute, or a `*` / `?` glob; a directory excludes everything below it. Add more at runtime with `exclude()`. |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | Moves the additional options file to a new location to isolate the configuration environment. While a group is watched it becomes `DuckCoverage/<group>.DuckPhpData.config.json`. |
 | `duckcoverage_reg_console_command` | `true` | Register the CLI command so that `cover` is available. Registration happens before the enable check, so `cover` can report that the feature is switched off. |
 | `duckcoverage_path` | `<runtime>/DuckCoverage/` | Base path for watch markers, dumps and reports. Always derived from the runtime path at init time. |
@@ -551,6 +552,7 @@ public function callHandler($handler, $ext_args = [])
 public function watchingGetName()
 public function logException(\Throwable $ex)
 public function explainMarco($test_list)
+public function exclude($paths = [])
 ```
 
 - `BeforeRun` / `AfterRun` (`_OnBeforeRun` / `_OnAfterRun`) are hook callbacks; they only do anything in route hook mode.
@@ -558,6 +560,7 @@ public function explainMarco($test_list)
 - `init()` inserts the extension into the application.
 - `watchingGetName()` returns the group currently being watched: the in-process group if there is one, otherwise the group recorded in `DuckCoverage.watching.txt` (that is, the last `--watch`). It returns `false` when nothing is being watched. It is public so a test-list callback or diagnostics code can ask "which group am I collecting into?".
 - `explainMarco($test_list)` expands the macro directives of a test list (`#PHASE_BEGIN`, `#BUSINESS`, `#ADMIN_LOGIN`, …) and returns the result; the `GetTestList()` callback can call it when it wants to expand a fragment itself. It is the same expansion the extension applies to your callback's text.
+- `exclude($paths)` adds directories or files to the exclusion list; it returns `$this` (so calls can be chained) and accepts a string as well as an array. Entries may be project-relative (`src/ThirdParty`), source-relative (`ThirdParty`), absolute, or a glob such as `src/*\/Generated`; excluding a directory excludes every file below it (Windows backslashes are normalised to `/`). Excluded files are neither collected nor listed in the HTML report, `report.json` or `report.jsonl`.
 - `InitedThenGoRouteHookMode()` switches to route hook mode and must be called after the application has been initialized.
 - `genTestListOfAll()` generates a test list from routes, console commands and `Business` / `Model` components; paste the output into your `GetTestList()` as a starting point.
 - `command_cover` registers the CLI command.

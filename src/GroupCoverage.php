@@ -24,6 +24,8 @@ use SebastianBergmann\CodeCoverage\Report\PHP as ReportOfPHP;
 class GroupCoverage
 {
     public $options = [
+        // 排除的目录/文件（由 DuckCoverage::exclude() / option duckcoverage_exclude 灌进来）
+        'exclude' => [],
     ];
     public $is_inited = false;
 
@@ -35,6 +37,13 @@ class GroupCoverage
     protected $is_end = false;
 
     protected $driver_class = '';
+
+    /**
+     * 排除的目录/文件（原始写法，匹配时才展开成绝对路径）
+     *
+     * @var array<int, string>
+     */
+    protected $exclude_paths = [];
 
     protected static $_instances = [];
 
@@ -240,11 +249,85 @@ class GroupCoverage
         $files = [];
         foreach ($iterator as $file) {
             if (is_file($file) && substr($file, -4) === '.php') {
+                if ($this->isExcludedPath($file, $path)) {
+                    continue;
+                }
                 $files[] = $file;
             }
         }
         sort($files);
         return $files;
+    }
+    /**
+     * 设置要排除的目录/文件（覆盖式）。匹配规则见 isExcludedPath()。
+     *
+     * @param array<int, string> $paths
+     */
+    public function setExcludePaths(array $paths): void
+    {
+        $this->exclude_paths = array_values(array_filter(array_map('strval', $paths), static function ($path) {
+            return $path !== '';
+        }));
+        $this->options['exclude'] = $this->exclude_paths;
+    }
+    /**
+     * 该文件是否被排除命中。
+     *
+     * 一条排除项可以是：
+     * - 绝对路径（目录或文件）；
+     * - 相对工程根的路径（推荐，如 `src/ThirdParty`、`src/System/Foo.php`）；
+     * - 相对源码目录的路径（如 `ThirdParty`）；
+     * - 含 `*` / `?` 的通配表达式（如 `src/*\/Generated`，按 fnmatch 匹配）。
+     * 目录按"前缀 + /"匹配（其下所有文件都被排除），文件按全等匹配；比较前一律把 `\` 归一成 `/`。
+     */
+    protected function isExcludedPath(string $file, string $path_src): bool
+    {
+        if (empty($this->exclude_paths)) {
+            return false;
+        }
+        $file = str_replace('\\', '/', $file);
+        foreach ($this->exclude_paths as $pattern) {
+            foreach ($this->expandExcludePattern($pattern, $path_src) as $candidate) {
+                if ($candidate === '') {
+                    continue;
+                }
+                if (strpbrk($candidate, '*?') !== false) {
+                    // 通配：整个路径匹配，或把它当目录匹配其下所有文件
+                    if (fnmatch($candidate, $file) || fnmatch(rtrim($candidate, '/') . '/*', $file)) {
+                        return true;
+                    }
+                    continue;
+                }
+                $candidate = rtrim($candidate, '/');
+                if ($file === $candidate || strpos($file, $candidate . '/') === 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    /**
+     * 把一条排除项展开成候选绝对路径：相对路径同时按"工程根"与"源码目录"两种基准解析，
+     * 因此写 `src/ThirdParty` 与写 `ThirdParty` 都能命中。
+     *
+     * @return array<int, string>
+     */
+    protected function expandExcludePattern(string $pattern, string $path_src): array
+    {
+        $pattern = trim(str_replace('\\', '/', $pattern));
+        if ($pattern === '') {
+            return [];
+        }
+        if ($pattern[0] === '/') {
+            return [rtrim($pattern, '/')];
+        }
+        $root = rtrim(str_replace('\\', '/', (string)\DuckPhp\Core\App::_()->getProjectPath()), '/') . '/';
+        $src = rtrim(str_replace('\\', '/', $path_src), '/') . '/';
+        return array_values(array_unique([
+            $root . ltrim($pattern, '/'),
+            $src . ltrim($pattern, '/'),
+            $pattern,
+        ]));
     }
     /**
      * 合并一个组目录下的所有 dump

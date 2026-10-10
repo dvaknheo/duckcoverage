@@ -486,6 +486,7 @@ public $options = [
 | `duckcoverage_stop_init` | `false` | 预留。置 `true` 时 `init()` 立即返回、跳过全部配置——扩展完全不初始化。与上面的开关无关 |
 | `duckcoverage_test_lister` | `null` | 返回回放清单的可调用对象；其 `GetTestList()` 文本会被 `explainMarco()` 展开。管理员/用户提供者可直接用现成回调：`TestListerHelper::TestListByAdminLogin()` / `...AdminLogout()` / `...AdminClean()`，以及 `...UserLogin()` / `...UserLogout()` / `...UserClean()` 三个——它们会先切到该提供者的 phase。有管理员/用户提供者的应用还可以继承 `TestListWithAuthBase` 并实现 `_GetTestListForLogin()` / `_GetTestListForLogout()` / `_GetTestListForClean()` / `_GetTestListFull()`：`#ADMIN_LOGIN` 等设置的那个参数会被基类消费掉并选择对应分支 |
 | `duckcoverage_flag` | `''` | 带进应用的标记：用 `getFlag()` 读取；web 模式下随请求放进 `X-DuckCoverage-Flag` 头。可被 `--flag=<值>` 覆盖 |
+| `duckcoverage_exclude` | `[]` | 不采集、也不进报告的目录或文件。可写相对工程根（`src/ThirdParty`）、相对源码目录（`ThirdParty`）、绝对路径，或 `*` / `?` 通配；排除一个目录即排除其下所有文件。运行时还可以用 `exclude()` 追加 |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | 把额外选项文件移到新位置，隔离配置环境。监听某个组期间会变成 `DuckCoverage/<组名>.DuckPhpData.config.json` |
 | `duckcoverage_reg_console_command` | `true` | 注册命令行，使 `cover` 指令生效。注册发生在开关判断之前，所以关掉开关时 `cover` 仍能提示功能未开启 |
 | `duckcoverage_path` | `<runtime>/DuckCoverage/` | 基础路径（监听标记 / dump / 报告）。init 时始终由运行时路径推导 |
@@ -554,6 +555,7 @@ public function callHandler($handler, $ext_args = [])
 public function watchingGetName()
 public function logException(\Throwable $ex)
 public function explainMarco($test_list)
+public function exclude($paths = [])
 ```
 
 - `BeforeRun` / `AfterRun`（即 `_OnBeforeRun` / `_OnAfterRun`）只是钩子回调，仅在 route hook 模式下有行为。
@@ -561,6 +563,7 @@ public function explainMarco($test_list)
 - `init()` 会插入一个 ext 扩展运行。
 - `InitedThenGoRouteHookMode()` 切到 route hook 模式，必须在应用初始化完成后调用。
 - `genTestListOfAll()` 从路由、控制台命令以及 `Business` / `Model` 组件生成测试清单，输出可以直接粘进你的 `GetTestList()` 作为起点。
+- `exclude($paths)` 往排除清单里追加目录或文件；返回 `$this`（可以链式调用），参数既接受数组也接受字符串。可写相对工程根（`src/ThirdParty`）、相对源码目录（`ThirdParty`）、绝对路径，或 `src/*\/Generated` 这类通配；排除一个目录即排除其下所有文件（Windows 的反斜杠会归一成 `/`）。被排除的文件既不采集，也不出现在 HTML 报告、`report.json` 与 `report.jsonl` 里。
 - `command_cover` 注册命令行。
 - `watchingGetName()` 返回当前正在监听的组名：进程内有状态就取它，否则读 `DuckCoverage.watching.txt`（也就是最后一次 `--watch` 的组）；没有在监听时返回 `false`。它是公开方法，方便测试清单回调或诊断代码问"我现在在往哪个组采集"。
 

@@ -76,6 +76,37 @@ class GroupCoverageTest extends \PHPUnit\Framework\TestCase
         // 正常有数据时：不带 warning（不要复用 complete 表达"数据可疑"）
         $this->assertStringNotContainsString('"t":"warning"', $text);
 
+        // exclude：排除目录/文件（相对源码目录、绝对路径、通配），并影响报告里的文件集合
+        $ex_root = $path.'exclude/';
+        @mkdir($ex_root.'src/Keep', 0777, true);
+        @mkdir($ex_root.'src/Drop/Deep', 0777, true);
+        @mkdir($ex_root.'src/Other', 0777, true);
+        file_put_contents($ex_root.'src/Keep/Keep.php', "<?php\n");
+        file_put_contents($ex_root.'src/Drop/Drop.php', "<?php\n");
+        file_put_contents($ex_root.'src/Drop/Deep/Deep.php', "<?php\n");
+        file_put_contents($ex_root.'src/Other/Other.php', "<?php\n");
+        $names = static function (array $files): array {
+            return array_map('basename', $files);
+        };
+        $this->assertSame(['Deep.php', 'Drop.php', 'Keep.php', 'Other.php'], $names(GroupCoverageEx::_()->testSourceFiles($ex_root.'src/')));
+
+        // 相对"源码目录"写目录名：整个目录都被排除（含子目录）
+        GroupCoverageEx::_()->setExcludePaths(['Drop']);
+        $this->assertSame(['Keep.php', 'Other.php'], $names(GroupCoverageEx::_()->testSourceFiles($ex_root.'src/')));
+
+        // 绝对路径排除单个文件
+        GroupCoverageEx::_()->setExcludePaths([$ex_root.'src/Other/Other.php']);
+        $this->assertSame(['Deep.php', 'Drop.php', 'Keep.php'], $names(GroupCoverageEx::_()->testSourceFiles($ex_root.'src/')));
+
+        // 通配表达式
+        GroupCoverageEx::_()->setExcludePaths(['*/Keep/*']);
+        $this->assertSame(['Deep.php', 'Drop.php', 'Other.php'], $names(GroupCoverageEx::_()->testSourceFiles($ex_root.'src/')));
+
+        // 清空即恢复
+        GroupCoverageEx::_()->setExcludePaths([]);
+        $this->assertCount(4, GroupCoverageEx::_()->testSourceFiles($ex_root.'src/'));
+        $this->assertSame([], GroupCoverageEx::_()->options['exclude']);
+
        
 
         
@@ -131,5 +162,12 @@ class GroupCoverageEx extends GroupCoverage
         $path_report = $path.'path_report/';
 
         GroupCoverageEx::_()->createReport($groups, $path_src,  $path_dump, $path_report);
+    }
+    /**
+     * @return array<int, string>
+     */
+    public function testSourceFiles(string $path): array
+    {
+        return $this->sourceFiles($path);
     }
 }

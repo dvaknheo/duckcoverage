@@ -101,6 +101,17 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         $this->assertSame('', DuckCoverage::_()->explainMarco(''));
         $this->assertSame('#NOPE', DuckCoverage::_()->explainMarco('#NOPE'));
 
+        // exclude()：可多次调用累加、Windows 反斜杠会被归一成 /，并同步给采集/报告侧
+        $this->assertSame([], DuckCoverage::_()->options['duckcoverage_exclude']);
+        $ret = DuckCoverage::_()->exclude(['src\\ThirdParty', ' src/System/Foo.php ']);
+        $this->assertSame(DuckCoverage::_(), $ret);
+        $this->assertSame(['src/ThirdParty', 'src/System/Foo.php'], DuckCoverage::_()->options['duckcoverage_exclude']);
+        DuckCoverage::_()->exclude('ThirdParty');   // 字符串也接受
+        $this->assertSame(['src/ThirdParty', 'src/System/Foo.php', 'ThirdParty'], DuckCoverage::_()->options['duckcoverage_exclude']);
+        $this->assertSame(DuckCoverage::_()->options['duckcoverage_exclude'], \DuckCoverage\GroupCoverage::_()->options['exclude']);
+        DuckCoverage::_()->exclude([]);             // 空数组是 no-op
+        $this->assertCount(3, DuckCoverage::_()->options['duckcoverage_exclude']);
+
         // logException：把异常类名/错误码/位置/信息追加到 <duckcoverage_path>DuckCoverage.exception.log
         $log_path = DuckCoverageEx::_()->logException(new \RuntimeException("boom\nsecond line", 42));
         $this->assertNotSame('', $log_path);

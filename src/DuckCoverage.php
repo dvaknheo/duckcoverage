@@ -33,6 +33,8 @@ class DuckCoverage extends ComponentBase
 
         'duckcoverage_path' => '',
         'duckcoverage_path_src' => 'src/', // 需要
+        // 排除的目录/文件（相对工程根或源码目录，支持 * 通配；见 exclude()）
+        'duckcoverage_exclude' => [],
         'duckcoverage_report_direct' => false,
         'duckcoverage_report_default_dir' => 'AAAAA.report',
 
@@ -92,6 +94,30 @@ class DuckCoverage extends ComponentBase
         PhaseContainer::_()->addSharedClasses([static::class => true, Console::class => true]);
         return static::_()->beforeInit($options);
     }
+    /**
+     * 排除目录或文件（可多次调用，累加）。也可以在配置里直接写 options['duckcoverage_exclude']。
+     *
+     * 路径写法（匹配规则见 GroupCoverage::isExcludedPath()）：
+     * - 相对工程根：`src/ThirdParty`、`src/System/Foo.php`；
+     * - 相对源码目录：`ThirdParty`；
+     * - 绝对路径；
+     * - 含 `*` / `?` 的通配表达式：`src/*\/Generated`。
+     * 排除一个目录即排除其下所有文件。
+     *
+     * @param array<int, string>|string $paths
+     * @return $this
+     */
+    public function exclude($paths = [])
+    {
+        $paths = array_filter(array_map(static function ($path) {
+            return trim(str_replace('\\', '/', (string)$path));
+        }, (array)$paths), static function ($path) {
+            return $path !== '';
+        });
+        $this->options['duckcoverage_exclude'] = array_values(array_unique(array_merge((array)$this->options['duckcoverage_exclude'], $paths)));
+        $this->getRunner()->setExcludePaths($this->options['duckcoverage_exclude']);
+        return $this;
+    }
     public static function InitedThenGoRouteHookMode()
     {
         return static::_()->runWithRouteHookMode();
@@ -99,6 +125,9 @@ class DuckCoverage extends ComponentBase
     public function beforeInit($options = [])
     {
         App::_()->options = array_merge($options, App::_()->options);
+
+        // 把排除列表交给采集/报告侧（每个进程都同步，子应用上下文也拿得到）
+        $this->getRunner()->setExcludePaths((array)($this->options['duckcoverage_exclude'] ?? []));
 
         if (!App::_()->isRoot()) {
             return;
