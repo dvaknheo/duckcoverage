@@ -602,7 +602,8 @@ EOT;
             $this->exitIfJsonlIncomplete($stats);
             return;
         }
-        echo "time_cost   : $time_cost seconds \noutput path : $path_report \n";
+        echo "time_cost   : $time_cost seconds \n";
+        echo "html report : $path_report \n";
         echo "json report : " . ($stats['json_report'] ?? '') . " \n";
         if (!empty($stats['jsonl_report'])) {
             echo "jsonl report: " . $stats['jsonl_report'] . " \n";

@@ -90,13 +90,12 @@ class GroupCoverageTest extends \PHPUnit\Framework\TestCase
         };
         $this->assertSame(['Deep.php', 'Drop.php', 'Keep.php', 'Other.php'], $names(GroupCoverageEx::_()->testSourceFiles($ex_root.'src/')));
 
-        // 相对"源码目录"写目录名：整个目录都被排除（含子目录）
-        GroupCoverageEx::_()->setExcludePaths(['Drop']);
+        // 相对源码目录（duckcoverage_path_src）解析：
+        // 写目录名（建议带结尾 /）与不带结尾等价；不再相对"工程根"解析
+        GroupCoverageEx::_()->setExcludePaths(['Drop/']);
         $this->assertSame(['Keep.php', 'Other.php'], $names(GroupCoverageEx::_()->testSourceFiles($ex_root.'src/')));
-
-        // 相对"源码目录的父目录"（工程根）：不依赖 app 的 projectPath 也能命中
-        GroupCoverageEx::_()->setExcludePaths(['src/Drop']);
-        $this->assertSame(['Keep.php', 'Other.php'], $names(GroupCoverageEx::_()->testSourceFiles($ex_root.'src/')));
+        GroupCoverageEx::_()->setExcludePaths(['src/Drop']);   // 旧写法（相对工程根）不再命中
+        $this->assertCount(4, GroupCoverageEx::_()->testSourceFiles($ex_root.'src/'));
 
         // 绝对路径排除单个文件
         GroupCoverageEx::_()->setExcludePaths([$ex_root.'src/Other/Other.php']);
@@ -131,12 +130,14 @@ class GroupCoverageTest extends \PHPUnit\Framework\TestCase
         $this->assertNotEmpty($find_html($path.'path_report_all/'));          // 不排除时 HTML 里有
 
         GroupCoverageEx::_()->setExcludePaths(['App.php']);
-        if (is_dir($path.'path_report_ex/')) {
-            LibCoverage::_()->cleanDirectory($path.'path_report_ex/');   // HtmlReport 不清理旧输出，测试要自己清
-        }
+        // 出报告前会清空输出目录：先塞个旧文件，跑完必须没了
+        @mkdir($path.'path_report_ex/', 0777, true);
+        file_put_contents($path.'path_report_ex/stale.html', 'stale');
         GroupCoverageEx::_()->createReport(['group1'], $path.'src/', $path.'path_dump/', $path.'path_report_ex/', '');
         $this->assertFileExists($path.'path_report_ex/index.html');           // 报告本身照常生成
+        $this->assertFileDoesNotExist($path.'path_report_ex/stale.html');     // 旧文件被清掉
         $this->assertSame([], $find_html($path.'path_report_ex/'));           // 被排除的文件已从数据里剔掉
+        $this->assertDirectoryExists($path.'path_dump/');                     // dump 目录没被动
         GroupCoverageEx::_()->setExcludePaths([]);
 
        

@@ -196,6 +196,9 @@ class GroupCoverage
         // 必须取原始数据：getData() 默认会把"只在 filter 里、从未加载"的文件也补进来。
         $loaded_files = array_keys($coverage->getData(true)->lineCoverage());
 
+        // 出报告前先清空输出目录：HTML 报告只写不删，旧文件残留会让人误以为"排除没生效"
+        $this->cleanReportDir($path_report, $path_dump);
+
         // 补全部分覆盖文件：未执行的可执行行加入 lineCoverage（空数组），
         // 否则报告只统计已执行行，部分覆盖文件会错误显示为 100%
         $sig_lines = $this->fillPartialCoveredFiles($coverage);
@@ -276,6 +279,51 @@ class GroupCoverage
         $this->options['exclude'] = $this->exclude_paths;
     }
     /**
+     * 把目录下的 .php 逐个拉黑（Filter::excludeDirectory() 只对单层通配生效，不会递归）。
+     */
+    protected function blacklistDir(CodeCoverage $coverage, string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;   // @codeCoverageIgnore
+        }
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $file) {
+            $file = (string)$file;
+            if (is_file($file) && substr($file, -4) === '.php') {
+                $coverage->filter()->excludeFile($file);
+            }
+        }
+    }
+    /**
+     * 清空报告输出目录（HTML 报告只写不删，旧文件会一直留着）。
+     *
+     * 安全护栏：输出目录等于 dump 目录、或"包含" dump 目录时，一律不动手，免得误删采集数据。
+     */
+    protected function cleanReportDir(string $path_report, string $path_dump): void
+    {
+        $report = rtrim(str_replace('\\', '/', $path_report), '/');
+        $dump = rtrim(str_replace('\\', '/', $path_dump), '/');
+        if ($report === '' || $report === $dump || strpos($dump . '/', $report . '/') === 0) {
+            return;   // @codeCoverageIgnore
+        }
+        if (!is_dir($report)) {
+            return;
+        }
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($report, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $file) {
+            if ($file->isDir()) {
+                @rmdir((string)$file);
+            } else {
+                @unlink((string)$file);
+            }
+        }
+    }
+    /**
      * 把被排除的文件从"合并后的覆盖数据"里剔掉。
      *
      * 采集侧靠 filter 就能不收录，但已存在的 dump 里可能已经带着这些文件（规则是后配的、
@@ -287,6 +335,22 @@ class GroupCoverage
         if (empty($this->exclude_paths)) {
             return;
         }
+        // 先按"规则本身"把文件拉黑：HTML 报告的文件树来自 Filter，而 filter 里可能有
+        // 从未被加载过的文件（lang/view 之类），它们根本不在 dump 里。
+        // 注意 Filter::excludeDirectory() 不递归，所以这里自己走目录。
+        foreach ($this->exclude_paths as $pattern) {
+            foreach ($this->expandExcludePattern($pattern, $path_src) as $candidate) {
+                if (strpbrk($candidate, '*?') !== false) {
+                    continue;
+                }
+                if (is_dir($candidate)) {
+                    $this->blacklistDir($coverage, $candidate);
+                } elseif (is_file($candidate)) {
+                    $coverage->filter()->excludeFile($candidate);
+                }
+            }
+        }
+
         $data = $coverage->getData(true);
         $lines = $data->lineCoverage();
         $kept = [];
@@ -308,11 +372,12 @@ class GroupCoverage
      * 该文件是否被排除命中。
      *
      * 一条排除项可以是：
+     * - **相对源码目录**（`duckcoverage_path_src`）的路径，如 `Admin/config`、`System/Foo.php`；
+     *   排除目录时**建议在结尾写 `/`**（`Admin/config/`），意思更明确；
      * - 绝对路径（目录或文件）；
-     * - 相对工程根的路径（推荐，如 `src/ThirdParty`、`src/System/Foo.php`）；
-     * - 相对源码目录的路径（如 `ThirdParty`）；
-     * - 含 `*` / `?` 的通配表达式（如 `src/*\/Generated`，按 fnmatch 匹配）。
+     * - 含 `*` / `?` 的通配表达式（如 `Admin/*\/Generated`，按 fnmatch 匹配）。
      * 目录按"前缀 + /"匹配（其下所有文件都被排除），文件按全等匹配；比较前一律把 `\` 归一成 `/`。
+     * 注意：相对写法**只**相对源码目录解析，不再看应用的 projectPath。
      */
     protected function isExcludedPath(string $file, string $path_src): bool
     {
@@ -341,8 +406,8 @@ class GroupCoverage
         return false;
     }
     /**
-     * 把一条排除项展开成候选绝对路径：相对路径同时按"工程根"与"源码目录"两种基准解析，
-     * 因此写 `src/ThirdParty` 与写 `ThirdParty` 都能命中。
+     * 把一条排除项展开成候选绝对路径：绝对路径按字面，相对路径一律相对源码目录
+     * （`duckcoverage_path_src`）解析 —— 不依赖应用是否 init、在哪个 phase。
      *
      * @return array<int, string>
      */
@@ -355,16 +420,13 @@ class GroupCoverage
         if ($pattern[0] === '/') {
             return [rtrim($pattern, '/')];
         }
-        $root = rtrim(str_replace('\\', '/', (string)\DuckPhp\Core\App::_()->getProjectPath()), '/') . '/';
-        $src = rtrim(str_replace('\\', '/', $path_src), '/') . '/';
-        // 源码目录的父目录通常就是工程根：用它当基准，不依赖 app 是否 init、在哪个 phase
-        $parent = rtrim(str_replace('\\', '/', dirname(rtrim($src, '/'))), '/') . '/';
-        return array_values(array_unique([
-            $root . ltrim($pattern, '/'),
-            $parent . ltrim($pattern, '/'),
-            $src . ltrim($pattern, '/'),
-            $pattern,
-        ]));
+        $src = rtrim(str_replace('\\', '/', $path_src), '/');
+        $candidates = [$src . '/' . ltrim($pattern, '/')];
+        if (strpbrk($pattern, '*?') !== false) {
+            // 通配写法再按字面试一次：可以写成绝对路径通配，或跨目录的 * 形式
+            $candidates[] = $pattern;
+        }
+        return $candidates;
     }
     /**
      * 合并一个组目录下的所有 dump
