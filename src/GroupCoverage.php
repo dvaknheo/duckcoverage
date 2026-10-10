@@ -187,6 +187,11 @@ class GroupCoverage
                 ];
             }
         }
+        // 合并后的数据里可能带着"现在被排除"的文件（排除是后配的，或 dump 来自别的配置）。
+        // 报告的三个出口(HTML / report.json / report.jsonl)必须同一口径：这里直接把它们从数据里剔除，
+        // 而不是只靠 filter —— php-code-coverage 的 HTML 报告是拿合并后的数据出节点的，filter 拦不住旧数据。
+        $this->pruneExcludedFiles($coverage, $path_src);
+
         // 补坑之前先记下"驱动报告过的文件"＝运行时真的被加载过(JSON 的 loaded 字段)。
         // 必须取原始数据：getData() 默认会把"只在 filter 里、从未加载"的文件也补进来。
         $loaded_files = array_keys($coverage->getData(true)->lineCoverage());
@@ -271,6 +276,35 @@ class GroupCoverage
         $this->options['exclude'] = $this->exclude_paths;
     }
     /**
+     * 把被排除的文件从"合并后的覆盖数据"里剔掉。
+     *
+     * 采集侧靠 filter 就能不收录，但已存在的 dump 里可能已经带着这些文件（规则是后配的、
+     * 或 dump 来自别的配置）；而 HTML 报告是直接拿合并数据出节点的，filter 管不到旧数据，
+     * 所以要在渲染之前从数据里删掉，保证三个出口口径一致。
+     */
+    protected function pruneExcludedFiles(CodeCoverage $coverage, string $path_src): void
+    {
+        if (empty($this->exclude_paths)) {
+            return;
+        }
+        $data = $coverage->getData(true);
+        $lines = $data->lineCoverage();
+        $kept = [];
+        foreach ($lines as $file => $file_lines) {
+            if ($this->isExcludedPath($file, $path_src)) {
+                // HTML 报告的文件列表来自 Filter::isFile()，所以除了从数据里删，还必须把文件拉黑
+                $coverage->filter()->excludeFile($file);
+                continue;
+            }
+            $kept[$file] = $file_lines;
+        }
+        if (count($kept) === count($lines)) {
+            return;
+        }
+        $data->setLineCoverage($kept);
+        $data->setFunctionCoverage(array_intersect_key($data->functionCoverage(), $kept));
+    }
+    /**
      * 该文件是否被排除命中。
      *
      * 一条排除项可以是：
@@ -323,8 +357,11 @@ class GroupCoverage
         }
         $root = rtrim(str_replace('\\', '/', (string)\DuckPhp\Core\App::_()->getProjectPath()), '/') . '/';
         $src = rtrim(str_replace('\\', '/', $path_src), '/') . '/';
+        // 源码目录的父目录通常就是工程根：用它当基准，不依赖 app 是否 init、在哪个 phase
+        $parent = rtrim(str_replace('\\', '/', dirname(rtrim($src, '/'))), '/') . '/';
         return array_values(array_unique([
             $root . ltrim($pattern, '/'),
+            $parent . ltrim($pattern, '/'),
             $src . ltrim($pattern, '/'),
             $pattern,
         ]));

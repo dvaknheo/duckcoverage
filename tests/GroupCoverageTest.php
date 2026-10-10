@@ -94,6 +94,10 @@ class GroupCoverageTest extends \PHPUnit\Framework\TestCase
         GroupCoverageEx::_()->setExcludePaths(['Drop']);
         $this->assertSame(['Keep.php', 'Other.php'], $names(GroupCoverageEx::_()->testSourceFiles($ex_root.'src/')));
 
+        // 相对"源码目录的父目录"（工程根）：不依赖 app 的 projectPath 也能命中
+        GroupCoverageEx::_()->setExcludePaths(['src/Drop']);
+        $this->assertSame(['Keep.php', 'Other.php'], $names(GroupCoverageEx::_()->testSourceFiles($ex_root.'src/')));
+
         // 绝对路径排除单个文件
         GroupCoverageEx::_()->setExcludePaths([$ex_root.'src/Other/Other.php']);
         $this->assertSame(['Deep.php', 'Drop.php', 'Keep.php'], $names(GroupCoverageEx::_()->testSourceFiles($ex_root.'src/')));
@@ -106,6 +110,34 @@ class GroupCoverageTest extends \PHPUnit\Framework\TestCase
         GroupCoverageEx::_()->setExcludePaths([]);
         $this->assertCount(4, GroupCoverageEx::_()->testSourceFiles($ex_root.'src/'));
         $this->assertSame([], GroupCoverageEx::_()->options['exclude']);
+
+        // 报告侧：已存在的 dump 里带着"现在才排除"的文件时，也要从合并数据里剔除
+        // （HTML 报告直接拿合并数据出节点，filter 管不到旧数据）
+        $find_html = static function (string $dir): array {
+            $suffix = 'App.php.html';
+            $out = [];
+            if (!is_dir($dir)) {
+                return $out;
+            }
+            $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS));
+            foreach ($it as $file) {
+                if (substr((string)$file, -strlen($suffix)) === $suffix) {
+                    $out[] = (string)$file;
+                }
+            }
+            return $out;
+        };
+        GroupCoverageEx::_()->createReport(['group1'], $path.'src/', $path.'path_dump/', $path.'path_report_all/', '');
+        $this->assertNotEmpty($find_html($path.'path_report_all/'));          // 不排除时 HTML 里有
+
+        GroupCoverageEx::_()->setExcludePaths(['App.php']);
+        if (is_dir($path.'path_report_ex/')) {
+            LibCoverage::_()->cleanDirectory($path.'path_report_ex/');   // HtmlReport 不清理旧输出，测试要自己清
+        }
+        GroupCoverageEx::_()->createReport(['group1'], $path.'src/', $path.'path_dump/', $path.'path_report_ex/', '');
+        $this->assertFileExists($path.'path_report_ex/index.html');           // 报告本身照常生成
+        $this->assertSame([], $find_html($path.'path_report_ex/'));           // 被排除的文件已从数据里剔掉
+        GroupCoverageEx::_()->setExcludePaths([]);
 
        
 

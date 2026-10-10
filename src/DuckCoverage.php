@@ -183,6 +183,11 @@ class DuckCoverage extends ComponentBase
     {
         parent::init($options, $context);
 
+        // 应用的 options 是在 parent::init() 里才并进 $this->options 的：
+        // beforeInit() 阶段同步的那次还看不到 duckcoverage_exclude（应用通常 Prepare([])），
+        // 所以 options 到位后必须再同步一次，否则"配置里写了排除"也不会生效。
+        $this->getRunner()->setExcludePaths((array)($this->options['duckcoverage_exclude'] ?? []));
+
         if (!App::_()->isRoot()) {
             return $this;
         }
