@@ -35,6 +35,9 @@ class DuckCoverage extends ComponentBase
         'duckcoverage_path_src' => 'src/', // 需要
         // 排除的目录/文件（相对工程根或源码目录，支持 * 通配；见 exclude()）
         'duckcoverage_exclude' => [],
+        // RUN 指令在哪个入口脚本下起子进程；空则用当前 CLI 入口($_SERVER['argv'][0])，
+        // 取不到可用入口时退回"同进程执行"
+        'duckcoverage_run_entry' => '',
         'duckcoverage_report_direct' => false,
         'duckcoverage_report_default_dir' => 'AAAAA.report',
 
@@ -203,6 +206,7 @@ class DuckCoverage extends ComponentBase
         //     App::_()->regConsoleCommand(static::class, 'command_');
         // }
         $this->current_group = $this->watchingGetName();
+        $this->setupRunChild();   // RUN 子进程：按环境变量认领身份并立刻开始采集
         $this->initAction();
 
         return $this;
@@ -859,6 +863,10 @@ trait DuckCoverage_CommandTrait
 
         $new_argv = $this->shell_parse($str);
 
+        if ($this->runInNewProcess($sub_cmd, $new_argv)) {
+            return;
+        }
+        // 起不了子进程(没有可用的入口脚本,或 proc_open 被禁用):退回同进程执行,行为与以前一致
         array_unshift($new_argv, $sub_cmd);
         array_unshift($new_argv, '-');
 
@@ -870,6 +878,84 @@ trait DuckCoverage_CommandTrait
         $_SERVER = $__SERVER;
 
         $this->doEnd();
+    }
+    /**
+     * 在新进程里跑一条 RUN 子命令(用 proc_open 起一个 php 子进程,不做 shell 解析)。
+     *
+     * 覆盖率由**子进程自己**采集并落盘:父进程用环境变量把这一轮的身份(组名、当前指令名)传下去,
+     * 子进程据此 doBegin(),并在退出时(含异常退出)把 dump 写进同一个组目录 —— 于是报告侧照旧
+     * 按组合并,不需要任何特殊照顾。
+     *
+     * @param array<int, string> $args
+     * @return bool true = 已经在子进程里跑完;false = 起不了子进程,调用方应退回同进程执行
+     */
+    protected function runInNewProcess(string $sub_cmd, array $args): bool
+    {
+        $entry = $this->getRunEntry();
+        if ($entry === '' || !function_exists('proc_open')) {
+            return false;   // @codeCoverageIgnore
+        }
+        $command = array_merge([PHP_BINARY, $entry, $sub_cmd], $args);
+
+        $env = getenv();
+        $env['DUCKCOVERAGE_RUN_CHILD'] = '1';
+        $env['DUCKCOVERAGE_RUN_GROUP'] = (string)$this->current_group;
+        $env['DUCKCOVERAGE_RUN_NAME'] = (string)$this->current_name;
+
+        // 子进程直接继承父进程的 stdio：这里不用 STDIN/STDOUT/STDERR 常量
+        // (CLI 之外、以及某些隔离环境下它们并不存在)，改用与 SAPI 无关的 php:// 描述符。
+        $descriptors = [
+            ['file', 'php://stdin', 'r'],
+            ['file', 'php://stdout', 'w'],
+            ['file', 'php://stderr', 'w'],
+        ];
+        $proc = @proc_open($command, $descriptors, $pipes, null, $env);
+        if (!is_resource($proc)) {
+            return false;   // @codeCoverageIgnore
+        }
+        $code = proc_close($proc);
+        if ($code !== 0) {
+            echo "\033[41;30mRUN failed ({$code}): {$sub_cmd}\033[0m\n";
+        }
+        return true;
+    }
+    /**
+     * RUN 子进程该用哪个入口脚本:先看选项 duckcoverage_run_entry,
+     * 否则用当前 CLI 入口(必须是真实存在的文件,否则没法起子进程)。
+     */
+    protected function getRunEntry(): string
+    {
+        $entry = (string)($this->options['duckcoverage_run_entry'] ?? '');
+        if ($entry !== '') {
+            return $entry;
+        }
+        $entry = (string)($_SERVER['argv'][0] ?? '');
+        return ($entry !== '' && is_file($entry)) ? $entry : '';
+    }
+    /**
+     * RUN 子进程的自我配置:父进程用环境变量把身份传下来,子进程据此开始采集,
+     * 并注册"退出时落盘"(register_shutdown_function 在 exit/致命错误时同样会执行)。
+     */
+    protected function setupRunChild(): void
+    {
+        if ((string)getenv('DUCKCOVERAGE_RUN_CHILD') === '') {
+            return;
+        }
+        $group = (string)getenv('DUCKCOVERAGE_RUN_GROUP');
+        if ($group === '') {
+            return;   // @codeCoverageIgnore
+        }
+        $name = (string)getenv('DUCKCOVERAGE_RUN_NAME');
+        $this->current_group = $group;
+        $this->current_name = $name !== '' ? $name : 'RUN';
+        @mkdir($this->current_path_dump);
+        $this->doBegin();
+        // @codeCoverageIgnoreStart
+        // 只有在子进程真正退出(含致命错误)时才会执行到这里,进程内无法覆盖
+        register_shutdown_function(function () {
+            $this->doEnd();
+        });
+        // @codeCoverageIgnoreEnd
     }
     ////////////////////////////////////////////////////////////////////////////
     public function callHandler($handler, $ext_args = [])

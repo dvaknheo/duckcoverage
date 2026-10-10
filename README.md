@@ -377,7 +377,7 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 | Directive | Description |
 |---|---|
 | `WEB <uri> [post] [AJAX\|OPTIONS]` | Play an HTTP request. The second part is POST data (`a=1&b=2`); the third part may be `AJAX` or `OPTIONS`. |
-| `RUN <command>` | Re-dispatch a CLI command of the same application **in the current process** (no child process), which is what makes its coverage collectable. |
+| `RUN <command>` | Run a CLI command of the same application **in a new process** (`proc_open`), so a slow or fatal command cannot take the play run down with it (nor pollute its state). The child collects its own coverage and writes its own dump into the group, so the report merges it like any other dump; a non-zero exit is reported as `RUN failed (<code>): <command>`. If the CLI entry cannot be guessed, set `duckcoverage_run_entry`. |
 | `CALL <class/@method [name=value]>` | Invoke a local callable object (class or function). If it throws, the exception goes to `DuckCoverage.exception.log` through `logException()` and playback continues with the next line (the dump is still closed properly). |
 | `SETWEB <pre_curl> <pre_webcall> <post_webcall> <post_curl>` | Set curl / web hooks for subsequent `WEB` lines (`_` clears a hook). |
 | `PHASE <phase>` | Switch the DuckPHP phase. |
@@ -439,6 +439,7 @@ php cli.php cover --go admin_login --flag=admin
 - `CALL` and `#INCLUDE_CALL` use the form `{phase}!class[->|::@]method parameter=value`; without `!`, no phase is used.
 - `#INCLUDE_CALL` invokes a handler and embeds the result in the current test list.
 - `RUN`: if a subcommand starts with `:`, the leading colon is stripped and the rest is used as an absolute command name instead of being prefixed with the application command prefix.
+- `RUN` spawns `<php> <entry> <command> [args…]` with `proc_open` (no shell involved). The child learns who it is through `DUCKCOVERAGE_RUN_CHILD` / `DUCKCOVERAGE_RUN_GROUP` / `DUCKCOVERAGE_RUN_NAME`, starts collecting at init and writes its dump at shutdown — so even a fatal error still produces a dump. When no usable entry script is found (`$_SERVER['argv'][0]` is not an existing file and `duckcoverage_run_entry` is empty) or `proc_open` is disabled, `RUN` falls back to executing in the current process, exactly as before.
 - The URI in `WEB` is wrapped by the `__url()` function, and the current URL base is stripped before the request is sent.
 - Hooks configured with `SETWEB` are consumed by the next web call, and where they run decides their phase:
   - `pre_curl` / `post_curl` run **locally** in the current process with callback arguments `$ch, $name`, so they keep the **current phase** of the play list.
@@ -510,7 +511,7 @@ public $options = [
 5. `--play` reads the test list from the callback and executes it line by line:
    - `WEB` requests are played with curl against the built-in test server (or the external server configured by `duckcoverage_web_base_url`) and are collected again because the group is still being watched.
    - `CALL` directives invoke local classes or functions through reflection.
-   - `RUN` directives re-enter the application's own CLI dispatch in the same process.
+   - `RUN` directives re-enter the application's own CLI dispatch in a **new process** (`proc_open`), so the playing process stays untouched; the fallback is the old in-process behaviour.
 6. `--report` builds a fresh `CodeCoverage`, includes `duckcoverage_path_src`, merges every dump of the requested groups, fills in the executable lines of partially covered files (so a partially covered file is not reported as 100%), and renders the HTML report.
 
 ## Internals

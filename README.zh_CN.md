@@ -380,7 +380,7 @@ php cli.php cover --report g1 g2 --jsonl=report.jsonl --jsonl-no-timestamp
 | 指令 | 说明 |
 |---|---|
 | `WEB <uri> [post] [AJAX\|OPTIONS]` | 回放一个 HTTP 请求；第二段是 POST 参数（`a=1&b=2`），第三段可写 `AJAX` 或 `OPTIONS` |
-| `RUN <命令>` | **在当前进程内**重新派发本应用的 CLI 命令（不单开进程），这也是它能被采集到覆盖率的原因 |
+| `RUN <命令>` | 在**新进程**里执行本应用的 CLI 命令（`proc_open` 起子进程），慢命令或致命错误都不会带崩回放进程，也不污染它的状态。子进程自己采集、自己把 dump 写进同一个组，报告侧照旧合并；非 0 退出会提示 `RUN failed (<码>): <命令>`。猜不到 CLI 入口时用 `duckcoverage_run_entry` 指定 |
 | `CALL <class/@method [name=value]>` | 调用本地可调用对象（类/函数）。抛异常时会经 `logException()` 记到 `DuckCoverage.exception.log`，回放继续走下一条（dump 照旧正常收尾） |
 | `SETWEB <pre_curl> <pre_webcall> <post_webcall> <post_curl>` | 为后续 `WEB` 行设置 curl / web 钩子（`_` 表示清除） |
 | `PHASE <phase>` | 切换 DuckPHP phase |
@@ -442,6 +442,7 @@ php cli.php cover --go admin_login --flag=admin
 - `CALL` 与 `#INCLUDE_CALL` 以 `{phase}!class[->|::@]method 参数=值` 形式调用；若没有 `!` 则不带 phase。
 - `#INCLUDE_CALL` 是调用的时候把结果嵌入当前测试列表。
 - `RUN`：如果子命令以 `:` 开始，会去掉这个前导冒号，并把剩下的部分当作绝对命令名，而不是拼上应用的命令前缀。
+- `RUN` 实际执行的是 `<php> <入口脚本> <子命令> [参数…]`（`proc_open`，不过 shell）。子进程通过 `DUCKCOVERAGE_RUN_CHILD` / `DUCKCOVERAGE_RUN_GROUP` / `DUCKCOVERAGE_RUN_NAME` 得知自己的身份，在 init 时开始采集、在退出时（含致命错误）写 dump。当找不到可用入口脚本（`$_SERVER['argv'][0]` 不是真实文件，且 `duckcoverage_run_entry` 为空）或 `proc_open` 被禁用时，`RUN` 退回"当前进程内执行"，行为与以前完全一致。
 - `WEB` 的 uri 会被 `__url()` 函数封装，并在发送前去掉当前 URL 基址。
 - `SETWEB` 设置的钩子在下一个 web 调用时被消费，而它们**在哪执行决定了默认 phase**：
   - `pre_curl` / `post_curl` 在**本地**当前进程执行（回调参数是 `$ch, $name`），因此沿用播放列表的**当前 phase**。
@@ -487,6 +488,7 @@ public $options = [
 | `duckcoverage_test_lister` | `null` | 返回回放清单的可调用对象；其 `GetTestList()` 文本会被 `explainMarco()` 展开。管理员/用户提供者可直接用现成回调：`TestListerHelper::TestListByAdminLogin()` / `...AdminLogout()` / `...AdminClean()`，以及 `...UserLogin()` / `...UserLogout()` / `...UserClean()` 三个——它们会先切到该提供者的 phase。有管理员/用户提供者的应用还可以继承 `TestListWithAuthBase` 并实现 `_GetTestListForLogin()` / `_GetTestListForLogout()` / `_GetTestListForClean()` / `_GetTestListFull()`：`#ADMIN_LOGIN` 等设置的那个参数会被基类消费掉并选择对应分支 |
 | `duckcoverage_flag` | `''` | 带进应用的标记：用 `getFlag()` 读取；web 模式下随请求放进 `X-DuckCoverage-Flag` 头。可被 `--flag=<值>` 覆盖 |
 | `duckcoverage_exclude` | `[]` | 不采集、也不进报告的目录或文件。可写相对工程根（`src/ThirdParty`）、相对源码目录（`ThirdParty`）、绝对路径，或 `*` / `?` 通配；排除一个目录即排除其下所有文件。运行时还可以用 `exclude()` 追加 |
+| `duckcoverage_run_entry` | `''` | 给 `RUN` 起子进程用的 CLI 入口脚本。留空 = 用 `$_SERVER['argv'][0]`（必须是真实存在的文件）；两者都不可用时，`RUN` 在当前进程内执行 |
 | `duckcoverage_data_file_json_file` | `'DuckPhpData-duckcoverage.config.json'` | 把额外选项文件移到新位置，隔离配置环境。监听某个组期间会变成 `DuckCoverage/<组名>.DuckPhpData.config.json` |
 | `duckcoverage_reg_console_command` | `true` | 注册命令行，使 `cover` 指令生效。注册发生在开关判断之前，所以关掉开关时 `cover` 仍能提示功能未开启 |
 | `duckcoverage_path` | `<runtime>/DuckCoverage/` | 基础路径（监听标记 / dump / 报告）。init 时始终由运行时路径推导 |
@@ -513,7 +515,7 @@ public $options = [
 5. `--play` 从回调读取测试清单并逐行执行：
    - `WEB` 请求通过 curl 对内置测试服务器（或设置了 `duckcoverage_web_base_url` 时的外部服务器）发起，因为组仍在监听中，所以会被再次采集。
    - `CALL` 指令通过反射直接调用本地类/函数。
-   - `RUN` 指令在同一进程内重新进入应用自己的 CLI 派发流程。
+   - `RUN` 指令在**新进程**里重新进入应用自己的 CLI 派发流程（`proc_open`），回放进程本身不受影响；起不了子进程时退回原来的同进程行为。
 6. `--report` 新建一个 `CodeCoverage`，收录 `duckcoverage_path_src`，合并所请求各组的全部 dump，补齐部分覆盖文件中可执行行（避免部分覆盖的文件被报成 100%），最后渲染 HTML 报告。
 
 ## 内部结构

@@ -112,6 +112,50 @@ class DuckCoverageTest extends \PHPUnit\Framework\TestCase
         DuckCoverage::_()->exclude([]);             // 空数组是 no-op
         $this->assertCount(3, DuckCoverage::_()->options['duckcoverage_exclude']);
 
+        // RUN 改成在新进程里执行：父进程把"这一轮的身份"用环境变量传下去，子进程用入口脚本跑那条子命令
+        $run_out = LibCoverage::_()->getClassTestPath(DuckCoverage::class) . 'run_child.json';
+        @unlink($run_out);
+        putenv('DUCKCOVERAGE_RUN_FIXTURE_OUT=' . $run_out);
+        $saved_entry = DuckCoverage::_()->options['duckcoverage_run_entry'];
+        DuckCoverage::_()->options['duckcoverage_run_entry'] = __DIR__ . '/run_child_fixture.php';
+        DuckCoverageEx::_()->testSetCurrent('unit_run', 'unit_group');
+
+        ob_start();
+        $ran = DuckCoverageEx::_()->testRunInNewProcess('cover:mycmd', ['7']);
+        $run_output = (string)ob_get_clean();
+        $this->assertTrue($ran);
+        $this->assertStringContainsString('RUN failed (7): cover:mycmd', $run_output);
+        $child = json_decode((string)file_get_contents($run_out), true);
+        $this->assertSame('1', $child['child']);
+        $this->assertSame('unit_group', $child['group']);
+        $this->assertSame('unit_run', $child['name']);
+        $this->assertSame(['cover:mycmd', '7'], $child['argv']);
+
+        // 入口取不到（argv[0] 不是真实文件、也没配 run_entry）→ getRunEntry() 返回空，调用方退回同进程
+        DuckCoverage::_()->options['duckcoverage_run_entry'] = '';
+        $this->assertSame('', DuckCoverageEx::_()->testGetRunEntry());
+        $saved_argv0 = $_SERVER['argv'][0];
+        $_SERVER['argv'][0] = __DIR__ . '/run_child_fixture.php';   // 真实文件则直接采用
+        $this->assertSame(__DIR__ . '/run_child_fixture.php', DuckCoverageEx::_()->testGetRunEntry());
+        $_SERVER['argv'][0] = $saved_argv0;
+        DuckCoverage::_()->options['duckcoverage_run_entry'] = $saved_entry;
+        @unlink($run_out);
+        putenv('DUCKCOVERAGE_RUN_FIXTURE_OUT');
+
+        // RUN 子进程的自我配置：环境变量 → 认领组名/指令名，立刻 doBegin，退出时 doEnd 落盘
+        putenv('DUCKCOVERAGE_RUN_CHILD=1');
+        putenv('DUCKCOVERAGE_RUN_GROUP=env_group');
+        putenv('DUCKCOVERAGE_RUN_NAME=env_name');
+        DuckCoverageEx::_()->cleanName();
+        DuckCoverageEx::_()->testSetupRunChild();
+        $this->assertSame('env_group', DuckCoverageEx::_()->testCurrentGroup());
+        $this->assertSame('env_name', DuckCoverageEx::_()->testCurrentName());
+        DuckCoverageEx::_()->testDoEnd();
+        $this->assertNotEmpty((array)glob(DuckCoverage::_()->options['duckcoverage_path'] . 'env_group/*.php'));
+        putenv('DUCKCOVERAGE_RUN_CHILD');
+        putenv('DUCKCOVERAGE_RUN_GROUP');
+        putenv('DUCKCOVERAGE_RUN_NAME');
+
         // logException：把异常类名/错误码/位置/信息追加到 <duckcoverage_path>DuckCoverage.exception.log
         $log_path = DuckCoverageEx::_()->logException(new \RuntimeException("boom\nsecond line", 42));
         $this->assertNotSame('', $log_path);
@@ -453,6 +497,34 @@ class DuckCoverageEx extends DuckCoverage
     public function testCurrentName(): string
     {
         return (string)$this->current_name;
+    }
+    public function testCurrentGroup(): string
+    {
+        return (string)$this->current_group;
+    }
+    public function testSetCurrent(string $name, string $group): void
+    {
+        $this->current_name = $name;
+        $this->current_group = $group;
+    }
+    public function testGetRunEntry(): string
+    {
+        return $this->getRunEntry();
+    }
+    /**
+     * @param array<int, string> $args
+     */
+    public function testRunInNewProcess(string $sub_cmd, array $args): bool
+    {
+        return $this->runInNewProcess($sub_cmd, $args);
+    }
+    public function testSetupRunChild(): void
+    {
+        $this->setupRunChild();
+    }
+    public function testDoEnd(): void
+    {
+        $this->doEnd();
     }
     /**
      * @param array<int, string> $argv
