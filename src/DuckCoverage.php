@@ -22,7 +22,7 @@ class DuckCoverage extends ComponentBase
     use DuckCoverage_HttpServerTrait;
     use DuckCoverage_HttpClientTrait;
 
-    const VERSION = '1.1.0';
+    const VERSION = '1.0.2';
     public $options = [
         'duckcoverage_stop_init' => false,
         'duckcoverage_data_file_json_file' => 'DuckPhpData-duckcoverage.config.json',

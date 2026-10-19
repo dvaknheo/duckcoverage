@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Earlier releases are
 available from the git tags (`v1.0.1`, …).
 
-## [1.1.0] - 2026-10-08
+## [1.0.2] - 2026-10-10
 
 Baseline: **DuckPHP 1.4.1** (`dvaknheo/duckphp: ^1.4.1`, including the
 `DuckPhp\HttpServer\HttpServer` component), `phpunit/php-code-coverage ^9.2.32`.
