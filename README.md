@@ -15,6 +15,13 @@ It works with [LibCoverage](https://github.com/dvaknheo/libcoverage), the covera
 - **Grouped workflow** — `--watch <group>` → play → `--report` renders an HTML report for the group.
 - **Two collection scopes** — the whole request by default, or only the routing phase with `InitedThenGoRouteHookMode()`.
 - **HTML reports** — rendered by `phpunit/php-code-coverage`.
+- **Machine-readable reports** — every report also writes `report.json` (per-file lines, uncovered / TODO / signature lines, totals), and `--jsonl` adds a line-oriented `report.jsonl` stream for diffing and batch tooling.
+- **`--flag`** — pass a free-form value into the application (`getFlag()`); during `--play` it travels as the `X-DuckCoverage-Flag` header, so one code base can be collected under several assumptions (admin / user / …).
+- **Test-list macros** — `#PHASE_BEGIN`, `#BUSINESS`, `#ADMIN_LOGIN`, `#CURRENT_PHASE`, … expand inside a test list; `TestListerHelper` ships ready-made callbacks and `TestListWithAuthBase` dispatches per login / logout / clean state.
+- **Excluding paths** — `duckcoverage_exclude` / `exclude()` leave vendored or generated code out of collection and out of every report.
+- **Failure diagnostics** — `CALL` exceptions go to `DuckCoverage.exception.log` (playback continues), `RUN` runs in a new process so a fatal command cannot take the play run down, and an empty result is reported instead of silently passing.
+
+See [CHANGELOG.md](CHANGELOG.md) for the changes in each release.
 
 ## Requirements
 

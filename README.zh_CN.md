@@ -16,6 +16,13 @@
 - **分组工作流** —— `--watch <组名>` → 回放 → `--report` 按组渲染 HTML 报告。
 - **两种采集范围** —— 默认采集整个请求；用 `InitedThenGoRouteHookMode()` 可只采集路由阶段。
 - **HTML 报告** —— 由 `phpunit/php-code-coverage` 提供渲染。
+- **机器可读报告** —— 每次出报告同时写 `report.json`（逐文件的可执行行、未覆盖行、签名行、TODO 行与总计）；`--jsonl` 另出面向行的 `report.jsonl`，便于 diff 与批处理。
+- **`--flag`** —— 把一个自由标记带进应用（`getFlag()`）；`--play` 期间它随 `X-DuckCoverage-Flag` 头走，同一份代码可以按不同前提（管理员 / 普通用户…）分别采集。
+- **清单宏指令** —— `#PHASE_BEGIN`、`#BUSINESS`、`#ADMIN_LOGIN`、`#CURRENT_PHASE` 等可在清单里展开；`TestListerHelper` 自带现成回调，`TestListWithAuthBase` 按 login / logout / clean 分派。
+- **排除路径** —— `duckcoverage_exclude` / `exclude()` 把第三方或生成代码排除在采集与所有报告之外。
+- **失败诊断** —— `CALL` 的异常写进 `DuckCoverage.exception.log` 且回放继续；`RUN` 在新进程里跑，致命命令不会带崩回放；空结果会明确报出来，而不是静默通过。
+
+各版本变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 环境要求
 
